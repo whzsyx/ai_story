@@ -77,10 +77,10 @@
 
           <div class="card-footer">
             <span class="meta-time">更新于 {{ formatDate(project.updated_at) }}</span>
-            <div class="card-actions">
-              <button class="ghost-action" @click.stop="handleEdit(project.id)">编辑</button>
+            <div class="project-card-actions">
+              <button class="project-card-action" @click.stop="handleEdit(project.id)">编辑</button>
               <button
-                class="ghost-action danger-action"
+                class="project-card-action project-card-action--danger"
                 :disabled="deletingProjectId === project.id"
                 @click.stop="handleDelete(project)"
               >
@@ -489,53 +489,13 @@ export default {
   color: #94a3b8;
 }
 
-.card-actions {
-  display: flex;
-  gap: 0.45rem;
-  align-items: center;
+.project-card-actions {
   opacity: 0;
   transition: opacity 0.2s ease;
 }
 
-.data-card:hover .card-actions {
+.data-card:hover .project-card-actions {
   opacity: 1;
-}
-
-.ghost-action {
-  padding: 0.32rem 0.72rem;
-  border-radius: 999px;
-  border: 1px solid rgba(148, 163, 184, 0.22);
-  background: rgba(255, 255, 255, 0.72);
-  color: #0f172a;
-  font-size: 0.78rem;
-  line-height: 1.2;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.ghost-action:hover {
-  border-color: rgba(20, 184, 166, 0.45);
-  box-shadow: 0 8px 18px rgba(20, 184, 166, 0.1);
-  transform: translateY(-1px);
-}
-
-.layout-shell.theme-dark .ghost-action {
-  background: rgba(15, 23, 42, 0.82);
-  color: #e2e8f0;
-  border-color: rgba(148, 163, 184, 0.22);
-}
-
-.danger-action {
-  color: #dc2626;
-}
-
-.layout-shell.theme-dark .danger-action {
-  color: #fca5a5;
-}
-
-.danger-action:hover {
-  border-color: rgba(239, 68, 68, 0.45);
-  box-shadow: 0 8px 18px rgba(239, 68, 68, 0.12);
 }
 
 .empty-state {

@@ -52,10 +52,10 @@
 
           <div class="card-footer">
             <span class="meta-time">更新于 {{ formatDate(episode.updated_at) }}</span>
-            <div class="card-actions">
-              <button class="ghost-action" @click.stop="goEditEpisode(episode.id)">编辑</button>
+            <div class="project-card-actions">
+              <button class="project-card-action" @click.stop="goEditEpisode(episode.id)">编辑</button>
               <button
-                class="ghost-action danger-action"
+                class="project-card-action project-card-action--danger"
                 :disabled="deletingEpisodeId === episode.id"
                 @click.stop="handleDeleteEpisode(episode)"
               >
@@ -344,15 +344,10 @@ export default {
   color: #e2e8f0;
 }
 
-.card-actions {
-  display: flex;
-  align-items: center;
-  gap: 0.45rem;
-  flex-wrap: wrap;
+.project-card-actions {
   justify-content: flex-end;
 }
 
-.ghost-action,
 .secondary-action {
   border-radius: 999px;
   padding: 0.34rem 0.78rem;
@@ -365,31 +360,16 @@ export default {
   transition: all 0.2s ease;
 }
 
-.layout-shell.theme-dark .ghost-action,
 .layout-shell.theme-dark .secondary-action {
   background: rgba(15, 23, 42, 0.82);
   color: #e2e8f0;
   border-color: rgba(148, 163, 184, 0.24);
 }
 
-.ghost-action:hover,
 .secondary-action:hover {
   border-color: rgba(20, 184, 166, 0.45);
   box-shadow: 0 8px 18px rgba(20, 184, 166, 0.1);
   transform: translateY(-1px);
-}
-
-.danger-action {
-  color: #dc2626;
-}
-
-.layout-shell.theme-dark .danger-action {
-  color: #fca5a5;
-}
-
-.danger-action:hover {
-  border-color: rgba(239, 68, 68, 0.45);
-  box-shadow: 0 8px 18px rgba(239, 68, 68, 0.12);
 }
 
 .empty-state {
