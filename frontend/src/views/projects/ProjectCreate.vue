@@ -76,6 +76,8 @@
 import { mapActions, mapState } from 'vuex';
 import { promptSetAPI } from '@/api/prompts';
 
+const DEFAULT_EPISODE_NAME_REGEX = /^第\d+集$/;
+
 export default {
   name: 'ProjectCreate',
   data() {
@@ -101,15 +103,36 @@ export default {
   computed: {
     ...mapState('projects', ['seriesList']),
   },
+  watch: {
+    'form.series': {
+      async handler(newValue, oldValue) {
+        if (!newValue || newValue === oldValue) {
+          return;
+        }
+        await this.applySeriesDefaults();
+      },
+    },
+    'form.episode_number'(newValue, oldValue) {
+      if (!newValue || newValue === oldValue) {
+        return;
+      }
+
+      const currentName = (this.form.name || '').trim();
+      if (!currentName || DEFAULT_EPISODE_NAME_REGEX.test(currentName)) {
+        this.form.name = `第${newValue}集`;
+      }
+    },
+  },
   async created() {
     await this.fetchSeries();
     if (this.$route.query.series_id) {
       this.form.series = this.$route.query.series_id;
     }
-    this.fetchTemplateSets();
+    await this.fetchTemplateSets();
+    await this.applySeriesDefaults();
   },
   methods: {
-    ...mapActions('projects', ['createProject', 'fetchSeries']),
+    ...mapActions('projects', ['createProject', 'fetchSeries', 'fetchSeriesDetail']),
     async fetchTemplateSets() {
       this.loadingTemplates = true;
       try {
@@ -117,6 +140,46 @@ export default {
         this.templateSets = response.results || response || [];
       } finally {
         this.loadingTemplates = false;
+      }
+    },
+    getLatestEpisode(episodes = []) {
+      if (!episodes.length) {
+        return null;
+      }
+
+      return [...episodes].sort((left, right) => {
+        const leftOrder = left.sort_order || left.episode_number || 0;
+        const rightOrder = right.sort_order || right.episode_number || 0;
+
+        if (leftOrder !== rightOrder) {
+          return rightOrder - leftOrder;
+        }
+
+        const leftTime = new Date(left.created_at || 0).getTime();
+        const rightTime = new Date(right.created_at || 0).getTime();
+        return rightTime - leftTime;
+      })[0];
+    },
+    async applySeriesDefaults() {
+      if (!this.form.series) {
+        this.form.episode_number = 1;
+        this.form.name = '第1集';
+        this.form.prompt_template_set = null;
+        return;
+      }
+
+      try {
+        const series = await this.fetchSeriesDetail(this.form.series);
+        const latestEpisode = this.getLatestEpisode(series?.episodes || []);
+        const nextEpisodeNumber = latestEpisode
+          ? ((latestEpisode.episode_number || latestEpisode.sort_order || 0) + 1)
+          : 1;
+
+        this.form.episode_number = nextEpisodeNumber;
+        this.form.name = `第${nextEpisodeNumber}集`;
+        this.form.prompt_template_set = latestEpisode?.prompt_template_set || null;
+      } catch (error) {
+        console.error('Failed to apply series defaults:', error);
       }
     },
     validateForm() {

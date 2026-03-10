@@ -359,12 +359,27 @@ class ProjectCreateSerializer(serializers.ModelSerializer):
         attrs = super().validate(attrs)
         series = attrs.get('series')
         episode_number = attrs.get('episode_number')
-        episode_title = attrs.get('episode_title', '')
+
+        latest_episode = None
+        if series:
+            latest_episode = (
+                series.episodes
+                .order_by('-sort_order', '-episode_number', '-created_at')
+                .first()
+            )
+
+            if not episode_number:
+                last_episode_number = None
+                if latest_episode:
+                    last_episode_number = latest_episode.episode_number or latest_episode.sort_order or 0
+                attrs['episode_number'] = (last_episode_number or 0) + 1
+                episode_number = attrs['episode_number']
+
+            if not attrs.get('prompt_template_set') and latest_episode and latest_episode.prompt_template_set:
+                attrs['prompt_template_set'] = latest_episode.prompt_template_set
 
         if series and not attrs.get('name'):
-            if episode_title:
-                attrs['name'] = episode_title.strip()
-            elif episode_number:
+            if episode_number:
                 attrs['name'] = f'第{episode_number}集'
 
         if series and attrs.get('sort_order', 0) == 0 and episode_number:
