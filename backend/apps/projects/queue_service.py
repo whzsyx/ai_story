@@ -1,17 +1,22 @@
 """分集任务队列服务。"""
 
 import logging
+from datetime import timedelta
 from typing import Any, Dict, Optional
 
+from celery.result import AsyncResult
 from django.core.cache import cache
 from django.db import transaction
 from django.utils import timezone
 
-from .models import EpisodeTaskQueue, Project, Series
+from config.celery_app import app
+
+from .models import EpisodeTaskQueue, Project, ProjectStage, Series
 
 logger = logging.getLogger(__name__)
 
 ACTIVE_QUEUE_STATUSES = ['waiting', 'running']
+STALE_QUEUE_TASK_TIMEOUT = timedelta(minutes=2)
 
 
 def _project_task_cache_key(project_id: str) -> str:
@@ -35,6 +40,111 @@ def _get_queue_position(queue_task: EpisodeTaskQueue) -> int:
     )
 
 
+def _get_worker_task_ids() -> Optional[set]:
+    try:
+        inspector = app.control.inspect(timeout=1.0)
+        worker_task_ids = set()
+
+        for task_map in [inspector.active() or {}, inspector.reserved() or {}]:
+            for tasks in task_map.values():
+                for task in tasks or []:
+                    task_id = task.get('id') or task.get('request', {}).get('id')
+                    if task_id:
+                        worker_task_ids.add(task_id)
+
+        for tasks in (inspector.scheduled() or {}).values():
+            for task in tasks or []:
+                request_data = task.get('request', {})
+                task_id = request_data.get('id') or task.get('id')
+                if task_id:
+                    worker_task_ids.add(task_id)
+
+        return worker_task_ids
+    except Exception:
+        logger.exception('检查 Celery worker 任务状态失败')
+        return None
+
+
+def _is_task_visible_to_workers(task_id: str) -> Optional[bool]:
+    if not task_id:
+        return False
+
+    worker_task_ids = _get_worker_task_ids()
+    if worker_task_ids is None:
+        return None
+    return task_id in worker_task_ids
+
+
+def _is_queue_task_stale(queue_task: EpisodeTaskQueue) -> bool:
+    started_at = queue_task.started_at or queue_task.created_at
+    if not started_at:
+        return True
+    return timezone.now() - started_at >= STALE_QUEUE_TASK_TIMEOUT
+
+
+def _get_recovery_final_status(queue_task: EpisodeTaskQueue) -> Optional[str]:
+    if not queue_task.celery_task_id:
+        return 'failed' if _is_queue_task_stale(queue_task) else None
+
+    task_state = AsyncResult(queue_task.celery_task_id).state
+    if task_state == 'SUCCESS':
+        return 'completed'
+    if task_state == 'FAILURE':
+        return 'failed'
+    if task_state == 'REVOKED':
+        return 'cancelled'
+    if task_state == 'RETRY':
+        return None
+
+    visible_to_workers = _is_task_visible_to_workers(queue_task.celery_task_id)
+    if visible_to_workers is True:
+        return None
+    if visible_to_workers is None:
+        return None
+    if task_state in ['PENDING', 'STARTED'] and _is_queue_task_stale(queue_task):
+        return 'failed'
+    return None
+
+
+def _repair_stale_running_task(series_id: str) -> Optional[EpisodeTaskQueue]:
+    with transaction.atomic():
+        running_task = (
+            EpisodeTaskQueue.objects.select_for_update()
+            .select_related('project')
+            .filter(series_id=series_id, status='running')
+            .order_by('created_at')
+            .first()
+        )
+        if not running_task:
+            return None
+
+        final_status = _get_recovery_final_status(running_task)
+        if not final_status:
+            return running_task
+
+        now = timezone.now()
+        running_task.status = final_status
+        running_task.completed_at = now
+        running_task.save(update_fields=['status', 'completed_at', 'updated_at'])
+
+        if final_status == 'completed':
+            Project.objects.filter(id=running_task.project_id, status='processing').update(
+                status='completed',
+                completed_at=now,
+            )
+        elif final_status == 'cancelled':
+            Project.objects.filter(id=running_task.project_id, status='processing').update(status='paused')
+        else:
+            Project.objects.filter(id=running_task.project_id, status='processing').update(status='failed')
+            ProjectStage.objects.filter(project_id=running_task.project_id, status='processing').update(
+                status='failed',
+                completed_at=now,
+                error_message='任务异常中断，系统已自动标记失败并释放队列。',
+            )
+
+        return None
+
+
 def get_active_queue_task_for_project(project: Project) -> Optional[EpisodeTaskQueue]:
     return (
         EpisodeTaskQueue.objects.filter(
@@ -56,6 +166,8 @@ def enqueue_episode_task(
     """将分集任务加入队列，并尝试立即调度。"""
     if not project.series_id:
         raise ValueError('仅系列分集支持排队')
+
+    dispatch_next_episode_task(project.series_id)
 
     with transaction.atomic():
         Series.objects.select_for_update().get(id=project.series_id)
@@ -148,6 +260,10 @@ def _launch_queue_task(queue_task_id: str) -> EpisodeTaskQueue:
 
 def dispatch_next_episode_task(series_id: str) -> Optional[EpisodeTaskQueue]:
     """调度同一作品下等待中的下一个分集任务。"""
+    repaired_task = _repair_stale_running_task(series_id)
+    if repaired_task and repaired_task.status == 'running':
+        return repaired_task
+
     with transaction.atomic():
         Series.objects.select_for_update().get(id=series_id)
 
@@ -230,6 +346,48 @@ def cancel_running_queue_task(project: Project) -> Optional[EpisodeTaskQueue]:
         queue_task.status = 'cancelled'
         queue_task.completed_at = timezone.now()
         queue_task.save(update_fields=['status', 'completed_at', 'updated_at'])
+        series_id = queue_task.series_id
+
+    dispatch_next_episode_task(series_id)
+    return queue_task
+
+
+def force_release_queue_task(project: Project, reason: str = '') -> Optional[EpisodeTaskQueue]:
+    """手动释放项目当前活跃队列任务，并尽快调度后续任务。"""
+    if not project.series_id:
+        return None
+
+    reason = reason or '任务被手动释放，队列已继续执行后续分集。'
+
+    with transaction.atomic():
+        queue_task = (
+            EpisodeTaskQueue.objects.select_for_update()
+            .filter(project=project, status__in=ACTIVE_QUEUE_STATUSES)
+            .order_by('created_at')
+            .first()
+        )
+        if not queue_task:
+            return None
+
+        now = timezone.now()
+        if queue_task.status == 'waiting':
+            queue_task.status = 'cancelled'
+            queue_task.completed_at = now
+            queue_task.save(update_fields=['status', 'completed_at', 'updated_at'])
+            if project.status == 'queued':
+                Project.objects.filter(id=project.id).update(status='draft')
+            return queue_task
+
+        queue_task.status = 'failed'
+        queue_task.completed_at = now
+        queue_task.save(update_fields=['status', 'completed_at', 'updated_at'])
+
+        Project.objects.filter(id=project.id).update(status='failed')
+        ProjectStage.objects.filter(project_id=project.id, status='processing').update(
+            status='failed',
+            completed_at=now,
+            error_message=reason,
+        )
         series_id = queue_task.series_id
 
     dispatch_next_episode_task(series_id)

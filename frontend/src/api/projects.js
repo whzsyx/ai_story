@@ -151,6 +151,14 @@ export default {
     return apiClient.post(`/projects/projects/${projectId}/run_pipeline/`);
   },
 
+  retryPipeline(projectId) {
+    return apiClient.post(`/projects/projects/${projectId}/retry_pipeline/`);
+  },
+
+  forceReleaseQueue(projectId, reason = '') {
+    return apiClient.post(`/projects/projects/${projectId}/force_release_queue/`, { reason });
+  },
+
   generateJianyingDraft(projectId, options = {}) {
     return apiClient.post(`/projects/projects/${projectId}/generate_jianying_draft/`, options);
   },

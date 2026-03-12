@@ -96,3 +96,91 @@ class ProjectQueueAPITestCase(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_202_ACCEPTED)
         self.assertEqual(response.data['queue_status'], 'running')
         self.assertEqual(EpisodeTaskQueue.objects.filter(project=self.project1, status__in=['waiting', 'running']).count(), 1)
+
+    @patch('apps.projects.queue_service._is_task_visible_to_workers', return_value=False)
+    @patch('apps.projects.queue_service.AsyncResult')
+    @patch('apps.projects.tasks.run_full_pipeline_task.delay')
+    def test_run_pipeline_recovers_stale_running_task(self, mock_delay, mock_async_result, _mock_visible):
+        mock_delay.return_value = SimpleNamespace(id='celery-task-2')
+        mock_async_result.return_value.state = 'PENDING'
+
+        stale_task = EpisodeTaskQueue.objects.create(
+            series=self.series,
+            project=self.project1,
+            task_type='pipeline',
+            status='running',
+            celery_task_id='stale-task-id',
+            created_by=self.user,
+        )
+        EpisodeTaskQueue.objects.filter(id=stale_task.id).update(
+            started_at=stale_task.created_at - __import__('datetime').timedelta(minutes=5)
+        )
+        Project.objects.filter(id=self.project1.id).update(status='processing')
+
+        response = self.client.post(
+            reverse('project-run-pipeline', args=[self.project2.id]),
+            {},
+            format='json',
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_202_ACCEPTED)
+        self.assertEqual(response.data['queue_status'], 'running')
+        self.assertEqual(response.data['task_id'], 'celery-task-2')
+
+        stale_task.refresh_from_db()
+        self.project1.refresh_from_db()
+        self.project2.refresh_from_db()
+
+        self.assertEqual(stale_task.status, 'failed')
+        self.assertEqual(self.project1.status, 'failed')
+        self.assertEqual(self.project2.status, 'processing')
+
+
+    @patch('apps.projects.tasks.run_full_pipeline_task.delay')
+    def test_force_release_running_queue_task(self, mock_delay):
+        mock_delay.return_value = SimpleNamespace(id='celery-task-1')
+
+        self.client.post(reverse('project-run-pipeline', args=[self.project1.id]), {}, format='json')
+        self.client.post(reverse('project-run-pipeline', args=[self.project2.id]), {}, format='json')
+
+        response = self.client.post(
+            reverse('project-force-release-queue', args=[self.project1.id]),
+            {'reason': '管理员手动释放'},
+            format='json',
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        first_task = EpisodeTaskQueue.objects.filter(project=self.project1).order_by('created_at').first()
+        second_task = EpisodeTaskQueue.objects.filter(project=self.project2).order_by('created_at').first()
+        self.project1.refresh_from_db()
+        self.project2.refresh_from_db()
+
+        self.assertEqual(first_task.status, 'failed')
+        self.assertEqual(second_task.status, 'running')
+        self.assertEqual(self.project1.status, 'failed')
+        self.assertEqual(self.project2.status, 'processing')
+
+    @patch('apps.projects.tasks.run_full_pipeline_task.delay')
+    def test_retry_pipeline_requeues_project(self, mock_delay):
+        mock_delay.return_value = SimpleNamespace(id='celery-task-9')
+        self.project1.status = 'failed'
+        self.project1.completed_at = __import__('django.utils.timezone').utils.timezone.now()
+        self.project1.save(update_fields=['status', 'completed_at', 'updated_at'])
+        self.project1.stages.filter(stage_type='rewrite').update(status='failed', error_message='旧错误')
+
+        response = self.client.post(
+            reverse('project-retry-pipeline', args=[self.project1.id]),
+            {},
+            format='json',
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_202_ACCEPTED)
+        self.assertEqual(response.data['queue_status'], 'running')
+        self.assertEqual(response.data['task_id'], 'celery-task-9')
+
+        self.project1.refresh_from_db()
+        rewrite_stage = self.project1.stages.get(stage_type='rewrite')
+        self.assertEqual(self.project1.status, 'processing')
+        self.assertEqual(rewrite_stage.status, 'pending')
+        self.assertEqual(rewrite_stage.error_message, '')

@@ -41,7 +41,10 @@
               </h2>
               <p class="card-desc">{{ episode.description || '暂无分集描述' }}</p>
             </div>
-            <span class="status-pill">{{ episode.status_display }}</span>
+            <div class="card-status-group">
+              <span class="status-pill" :class="statusClass(episode)">{{ displayStatus(episode) }}</span>
+              <span v-if="episode.queue_position && episode.queue_status === 'waiting'" class="queue-pill">队列第 {{ episode.queue_position }} 位</span>
+            </div>
           </div>
 
           <div class="card-meta">
@@ -58,6 +61,22 @@
           <div class="card-footer">
             <span class="meta-time">更新于 {{ formatDate(episode.updated_at) }}</span>
             <div class="project-card-actions">
+              <button
+                v-if="canRetryPipeline(episode)"
+                class="project-card-action"
+                :disabled="operatingEpisodeId === episode.id && operatingAction === 'retry'"
+                @click.stop="handleRetryPipeline(episode)"
+              >
+                {{ operatingEpisodeId === episode.id && operatingAction === 'retry' ? '重试中...' : '重试流程' }}
+              </button>
+              <button
+                v-if="canForceRelease(episode)"
+                class="project-card-action"
+                :disabled="operatingEpisodeId === episode.id && operatingAction === 'release'"
+                @click.stop="handleForceRelease(episode)"
+              >
+                {{ operatingEpisodeId === episode.id && operatingAction === 'release' ? '释放中...' : '释放队列' }}
+              </button>
               <button class="project-card-action" @click.stop="goEditEpisode(episode.id)">编辑</button>
               <button
                 class="project-card-action project-card-action--danger"
@@ -86,6 +105,8 @@ export default {
     return {
       loading: false,
       deletingEpisodeId: null,
+      operatingEpisodeId: null,
+      operatingAction: '',
     };
   },
   computed: {
@@ -98,7 +119,7 @@ export default {
     this.fetchData();
   },
   methods: {
-    ...mapActions('projects', ['fetchSeriesDetail', 'deleteProject']),
+    ...mapActions('projects', ['fetchSeriesDetail', 'deleteProject', 'retryPipeline', 'forceReleaseQueue']),
     formatDate,
     async fetchData() {
       this.loading = true;
@@ -125,6 +146,65 @@ export default {
     },
     goEditEpisode(id) {
       this.$router.push({ name: 'ProjectEdit', params: { id } });
+    },
+    displayStatus(episode) {
+      if (episode.queue_status === 'waiting') {
+        return '等待中';
+      }
+      return episode.status_display || '未知状态';
+    },
+    statusClass(episode) {
+      return {
+        'status-pill--queued': episode.queue_status === 'waiting' || episode.status === 'queued',
+        'status-pill--processing': episode.status === 'processing' || episode.queue_status === 'running',
+        'status-pill--failed': episode.status === 'failed',
+        'status-pill--completed': episode.status === 'completed',
+      };
+    },
+    canRetryPipeline(episode) {
+      return ['failed', 'paused', 'draft', 'queued'].includes(episode.status);
+    },
+    canForceRelease(episode) {
+      return ['processing', 'queued'].includes(episode.status) || ['waiting', 'running'].includes(episode.queue_status);
+    },
+    async handleRetryPipeline(episode) {
+      this.operatingEpisodeId = episode.id;
+      this.operatingAction = 'retry';
+      try {
+        const result = await this.retryPipeline({ projectId: episode.id });
+        await this.fetchData();
+        this.$message.success(result?.message || '已重新发起分集流程');
+      } catch (error) {
+        console.error('Failed to retry pipeline:', error);
+        this.$message.error(error?.message || '重试流程失败');
+      } finally {
+        this.operatingEpisodeId = null;
+        this.operatingAction = '';
+      }
+    },
+    async handleForceRelease(episode) {
+      const displayName = episode.display_name || episode.name || `第${episode.episode_number || '-'}集`;
+      const confirmed = window.confirm(`确定释放分集「${displayName}」的队列任务吗？`);
+      if (!confirmed) {
+        return;
+      }
+
+      this.operatingEpisodeId = episode.id;
+      this.operatingAction = 'release';
+      try {
+        const result = await this.forceReleaseQueue({
+          projectId: episode.id,
+          reason: '用户在作品详情手动释放队列',
+        });
+        await this.fetchData();
+        this.$message.success(result?.message || '队列任务已释放');
+      } catch (error) {
+        console.error('Failed to force release queue:', error);
+        this.$message.error(error?.message || '释放队列失败');
+      } finally {
+        this.operatingEpisodeId = null;
+        this.operatingAction = '';
+      }
     },
     async handleDeleteEpisode(episode) {
       const displayName = episode.display_name || episode.name || `第${episode.episode_number || '-'}集`;
@@ -303,6 +383,14 @@ export default {
   align-items: flex-start;
 }
 
+.card-status-group {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
 .card-title {
   margin: 0;
   display: flex;
@@ -323,7 +411,8 @@ export default {
 }
 
 .pill,
-.status-pill {
+.status-pill,
+.queue-pill {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -343,6 +432,31 @@ export default {
   color: #0f766e;
 }
 
+.status-pill--queued {
+  background: rgba(59, 130, 246, 0.12);
+  color: #1d4ed8;
+}
+
+.status-pill--processing {
+  background: rgba(20, 184, 166, 0.12);
+  color: #0f766e;
+}
+
+.status-pill--failed {
+  background: rgba(239, 68, 68, 0.12);
+  color: #b91c1c;
+}
+
+.status-pill--completed {
+  background: rgba(34, 197, 94, 0.12);
+  color: #15803d;
+}
+
+.queue-pill {
+  background: rgba(59, 130, 246, 0.1);
+  color: #1d4ed8;
+}
+
 .layout-shell.theme-dark .pill {
   background: rgba(148, 163, 184, 0.14);
   color: #e2e8f0;
@@ -351,6 +465,22 @@ export default {
 .layout-shell.theme-dark .status-pill {
   background: rgba(94, 234, 212, 0.12);
   color: #99f6e4;
+}
+
+.layout-shell.theme-dark .status-pill--queued,
+.layout-shell.theme-dark .queue-pill {
+  background: rgba(96, 165, 250, 0.16);
+  color: #bfdbfe;
+}
+
+.layout-shell.theme-dark .status-pill--failed {
+  background: rgba(248, 113, 113, 0.16);
+  color: #fecaca;
+}
+
+.layout-shell.theme-dark .status-pill--completed {
+  background: rgba(74, 222, 128, 0.16);
+  color: #bbf7d0;
 }
 
 .card-meta {

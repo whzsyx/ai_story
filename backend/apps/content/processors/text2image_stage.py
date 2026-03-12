@@ -7,6 +7,7 @@
 import copy
 import logging
 import random
+from collections.abc import Mapping
 from typing import Any, Dict, Generator, List, Optional
 from jinja2 import Template, TemplateError
 
@@ -558,26 +559,44 @@ class Text2ImageStageProcessor(StageProcessor):
             )
 
             if not response:
-                logger.error(f"分镜 {storyboard.get('sequence_number')} 图片生成返回空结果")
+                logger.error(f"分镜 {storyboard.get('scene_number')} 图片生成返回空结果")
                 return None
 
             # 解析响应
-            # 假设响应格式: {"data": [{"url": "...", "width": 1920, "height": 1080}]}
-            try:
-                if getattr(response, 'data'):
-                    response = {"data": getattr(response, 'data')}
-            except Exception:
-                pass
-            if 'data' not in response or not response['data']:
-                logger.error(f"分镜 {storyboard.get('sequence_number')} 响应格式错误: {response}")
+            # 兼容 AIResponse / dict / 其他映射对象
+            response_data = None
+            response_error = None
+
+            if isinstance(response, Mapping):
+                response_data = response.get('data')
+                response_error = response.get('error')
+            else:
+                response_data = getattr(response, 'data', None)
+                response_error = getattr(response, 'error', None)
+
+            if not response_data:
+                logger.error(
+                    f"分镜 {storyboard.get('scene_number')} 响应格式错误: "
+                    f"error={response_error}, response={response}"
+                )
                 return None
+
+            if isinstance(response_data, Mapping):
+                response_data = [response_data]
+            elif not isinstance(response_data, list):
+                logger.error(
+                    f"分镜 {storyboard.get('scene_number')} 图片数据类型错误: "
+                    f"{type(response_data).__name__}"
+                )
+                return None
+
             # [{"url": "http://"}]
-            image_data = response['data']
+            image_data = response_data
 
             return image_data
 
         except Exception as e:
-            logger.error(f"分镜 {storyboard.get('sequence_number')} 图片生成异常: {str(e)}", exc_info=True)
+            logger.error(f"分镜 {storyboard.get('scene_number')} 图片生成异常: {str(e)}", exc_info=True)
 
             # 创建失败记录
             try:

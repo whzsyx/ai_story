@@ -326,6 +326,22 @@ const actions = {
   async runPipeline(context, { projectId }) {
     return projectApi.runPipeline(projectId);
   },
+
+  async retryPipeline({ commit }, { projectId }) {
+    const result = await projectApi.retryPipeline(projectId);
+    if (result.project) {
+      commit('UPDATE_PROJECT', result.project);
+    }
+    return result;
+  },
+
+  async forceReleaseQueue({ commit }, { projectId, reason }) {
+    const result = await projectApi.forceReleaseQueue(projectId, reason);
+    if (result.project) {
+      commit('UPDATE_PROJECT', result.project);
+    }
+    return result;
+  },
 };
 
 export default {

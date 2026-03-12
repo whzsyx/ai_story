@@ -21,7 +21,7 @@ from rest_framework.response import Response
 from apps.prompts.models import GlobalVariable
 from apps.prompts.serializers import GlobalVariableListSerializer
 from .models import Project, ProjectAssetBinding, ProjectModelConfig, ProjectStage, Series
-from .queue_service import cancel_running_queue_task, enqueue_episode_task
+from .queue_service import cancel_running_queue_task, enqueue_episode_task, force_release_queue_task
 from .serializers import (
     ProjectBatchCreateSerializer,
     ProjectAssetBindingSerializer,
@@ -1144,6 +1144,57 @@ class ProjectViewSet(viewsets.ModelViewSet):
                     "movement_params": camera.movement_params,
                     "updated_at": camera.updated_at.isoformat() if camera.updated_at else None,
                 },
+            }
+        )
+
+    @action(detail=True, methods=["post"])
+    def retry_pipeline(self, request, pk=None):
+        """
+        重新发起当前分集的完整流程任务。
+        POST /api/v1/projects/{id}/retry_pipeline/
+        """
+        project = self.get_object()
+
+        if project.status == 'processing':
+            return Response(
+                {"error": "当前分集正在执行中，无需重试"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        project.stages.exclude(status='completed').update(
+            status='pending',
+            error_message='',
+            started_at=None,
+            completed_at=None,
+        )
+        project.completed_at = None
+        project.save(update_fields=['completed_at', 'updated_at'])
+
+        return self.run_pipeline(request, pk=pk)
+
+    @action(detail=True, methods=["post"])
+    def force_release_queue(self, request, pk=None):
+        """
+        手动释放当前分集的队列任务。
+        POST /api/v1/projects/{id}/force_release_queue/
+        """
+        project = self.get_object()
+        reason = request.data.get('reason', '').strip()
+        queue_task = force_release_queue_task(project, reason=reason)
+
+        if not queue_task:
+            return Response(
+                {"error": "当前分集没有可释放的队列任务"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        project.refresh_from_db()
+        return Response(
+            {
+                "message": "队列任务已释放",
+                "queue_task_id": str(queue_task.id),
+                "queue_status": queue_task.status,
+                "project": ProjectDetailSerializer(project).data,
             }
         )
 
