@@ -390,7 +390,8 @@ curl -X POST "http://localhost:8000/api/v1/projects/{project_id}/generate-jianyi
    - 视频文件必须存储在 `STORAGE_ROOT/video/` 目录下
 
 2. **字幕数据来源:**
-   - 从 `ProjectStage.output_data['human_text']['scenes'][].narration_text` 读取
+   - 从 `Storyboard.narration_text` 读取
+   - 视频片段从 `GeneratedVideo` 的已完成记录中按分镜顺序聚合
    - 如果字幕为空，将使用空字符串
 
 3. **草稿命名规则:**
