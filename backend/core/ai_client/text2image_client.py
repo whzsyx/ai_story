@@ -21,12 +21,6 @@ class Text2ImageClient(BaseText2ImageClient):
     IMAGE_MARKDOWN_PATTERN = re.compile(r'!\[[^\]]*\]\((https?://[^)]+)\)')
     URL_PATTERN = re.compile(r'https?://\S+')
 
-    def _build_api_url(self, api_url: str) -> str:
-        """兼容传入完整 chat/completions 地址或基础地址。"""
-        if api_url.endswith('/chat/completions'):
-            return api_url
-        return f"{api_url.rstrip('/')}/chat/completions"
-
     def _extract_image_urls(self, content: str) -> List[str]:
         """从返回内容中提取 Markdown 图片链接。"""
         if not content:
@@ -91,7 +85,7 @@ class Text2ImageClient(BaseText2ImageClient):
         if kwargs.get('response_format'):
             payload['response_format'] = kwargs['response_format']
 
-        request_url = self._build_api_url(api_url)
+        request_url = api_url
 
         try:
             response = requests.post(

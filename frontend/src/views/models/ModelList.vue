@@ -105,10 +105,12 @@
           <div class="card-actions">
             <button
               class="ghost-action"
+              :class="{ 'is-loading': testingProviderId === provider.id }"
               @click.stop="handleTest(provider)"
-              :disabled="!provider.is_active || testing"
+              :disabled="!provider.is_active || testingProviderId !== null"
             >
-              测试
+              <span v-if="testingProviderId === provider.id" class="action-spinner" aria-hidden="true"></span>
+              <span>{{ testingProviderId === provider.id ? '测试中...' : '测试' }}</span>
             </button>
             <button class="ghost-action" @click.stop="handleToggleStatus(provider)">
               {{ provider.is_active ? '停用' : '启用' }}
@@ -137,7 +139,7 @@ export default {
         provider_type: '',
         is_active: ''
       },
-      testing: false
+      testingProviderId: null
     }
   },
   computed: {
@@ -203,7 +205,7 @@ export default {
     },
 
     async handleTest(provider) {
-      this.testing = true
+      this.testingProviderId = provider.id
       try {
         const result = await this.testProviderConnection({
           id: provider.id,
@@ -219,7 +221,7 @@ export default {
         console.error('测试连接失败:', error)
         alert('测试连接失败')
       } finally {
-        this.testing = false
+        this.testingProviderId = null
       }
     },
 
@@ -648,6 +650,10 @@ export default {
 }
 
 .ghost-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
   padding: 0.35rem 0.75rem;
   border-radius: 999px;
   border: 1px solid transparent;
@@ -656,6 +662,11 @@ export default {
   font-size: 0.8rem;
   cursor: pointer;
   transition: all 0.2s ease;
+}
+
+.ghost-action:disabled {
+  cursor: not-allowed;
+  opacity: 0.68;
 }
 
 .layout-shell.theme-dark .ghost-action {
@@ -681,6 +692,36 @@ export default {
   border-color: rgba(248, 113, 113, 0.35);
   background: rgba(248, 113, 113, 0.12);
   color: #dc2626;
+}
+
+.ghost-action.is-loading {
+  border-color: rgba(20, 184, 166, 0.28);
+  background: rgba(20, 184, 166, 0.1);
+}
+
+.layout-shell.theme-dark .ghost-action.is-loading {
+  border-color: rgba(94, 234, 212, 0.32);
+  background: rgba(20, 184, 166, 0.18);
+}
+
+.action-spinner {
+  width: 0.85rem;
+  height: 0.85rem;
+  border-radius: 999px;
+  border: 2px solid rgba(15, 23, 42, 0.18);
+  border-top-color: currentColor;
+  animation: button-spin 0.75s linear infinite;
+}
+
+.layout-shell.theme-dark .action-spinner {
+  border-color: rgba(226, 232, 240, 0.2);
+  border-top-color: currentColor;
+}
+
+@keyframes button-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .empty-state {
