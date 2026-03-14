@@ -29,7 +29,8 @@ class VideoGeneratorClientTestCase(SimpleTestCase):
 
         result = client._generate_video(
             prompt='狗狗动起来',
-            image_uri='https://example.com/source.png',
+            image_base64='ZmFrZV9pbWFnZV9iYXNlNjQ=',
+            camera_movement_description='镜头缓慢推进，主体保持居中',
             model='grok-imagine-1.0-video',
         )
 
@@ -41,7 +42,11 @@ class VideoGeneratorClientTestCase(SimpleTestCase):
         )
         self.assertEqual(
             mock_post.call_args.kwargs['json']['messages'][0]['content'][1]['image_url']['url'],
-            'https://example.com/source.png',
+            'data:image/jpeg;base64,ZmFrZV9pbWFnZV9iYXNlNjQ=',
+        )
+        self.assertIn(
+            '运镜描述：镜头缓慢推进，主体保持居中',
+            mock_post.call_args.kwargs['json']['messages'][0]['content'][0]['text'],
         )
 
     @patch('core.ai_client.image2video_client.requests.post')
@@ -64,6 +69,8 @@ class VideoGeneratorClientTestCase(SimpleTestCase):
         task_id = client.create_video_task(
             prompt='狗狗动起来',
             image_uri='https://example.com/source.png',
+            image_base64='ZmFrZV9pbWFnZV9iYXNlNjQ=',
+            camera_movement_description='镜头轻微右移',
             model='video-model',
         )
 
@@ -72,4 +79,12 @@ class VideoGeneratorClientTestCase(SimpleTestCase):
         self.assertEqual(
             mock_post.call_args.args[0],
             'https://video.example.com/v1/video/generations',
+        )
+        self.assertEqual(
+            mock_post.call_args.kwargs['json']['imageBase64'],
+            'ZmFrZV9pbWFnZV9iYXNlNjQ=',
+        )
+        self.assertEqual(
+            mock_post.call_args.kwargs['json']['cameraMovementDescription'],
+            '镜头轻微右移',
         )

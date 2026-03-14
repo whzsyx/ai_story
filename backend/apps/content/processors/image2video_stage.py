@@ -250,6 +250,7 @@ class Image2VideoStageProcessor(StageProcessor):
                         # 保存最终生成的视频URL
                         if event["type"] == "video_generated":
                             video_urls_obj = event.get("video_urls", {})
+                            ## todo bug ["http"]
                             if getattr(video_urls_obj, "data", None):
                                 video_urls = video_urls_obj.data
                             else:
@@ -423,13 +424,19 @@ class Image2VideoStageProcessor(StageProcessor):
             model_name = provider.model_name
             api_key = provider.api_key
             api_url = provider.api_url
-            # 创建任务
+            image_url = image_urls[0].get("url", "") if image_urls else ""
+            image_base64 = storyboard.get("url", "")
+            camera_movement_description = self._build_camera_movement_description(project, scene_number)
+
             client = create_ai_client(provider)
             video_urls = client._generate_video(
                 api_url=api_url,
                 session_id=api_key,
                 model=model_name,
                 prompt=prompt,
+                image_uri=image_url,
+                image_base64=image_base64,
+                camera_movement_description=camera_movement_description,
             )
 
             yield {
@@ -444,6 +451,30 @@ class Image2VideoStageProcessor(StageProcessor):
             )
 
             yield {"type": "error", "error": str(e), "scene_number": scene_number}
+
+    def _build_camera_movement_description(self, project: Project, scene_number: int) -> str:
+        """构建运镜节点的运镜描述文本。"""
+        from apps.content.models import CameraMovement
+
+        camera_movement = CameraMovement.objects.filter(
+            storyboard__project=project,
+            storyboard__sequence_number=scene_number,
+        ).select_related('storyboard').first()
+        if not camera_movement:
+            return ''
+
+        raw_text = camera_movement.movement_params.get('raw_text', '')
+        if raw_text:
+            return raw_text
+        if camera_movement.prompt_used:
+            return camera_movement.prompt_used
+
+        parts = []
+        if camera_movement.movement_type:
+            parts.append(f"运镜类型: {camera_movement.movement_type}")
+        if camera_movement.movement_params:
+            parts.append(f"运镜参数: {camera_movement.movement_params}")
+        return '\n'.join(parts)
 
     def _get_prompt_template(self, project: Project):
         """获取提示词模板"""
