@@ -52,14 +52,14 @@
       >{{ data.original_text || '暂无原始文案' }}</div>
     </div>
 
-    <!-- <div class="node-section">
+    <div class="node-section node-section-editor">
       <label class="section-label">改写后文案</label>
       <div class="textarea-autocomplete-wrap">
         <textarea
           ref="rewriteTextarea"
           v-model="localText"
-          class="textarea textarea-bordered w-full"
-          rows="8"
+          class="textarea textarea-bordered w-full rewrite-textarea"
+          rows="3"
           placeholder="改写后的文案将显示在这里..."
           :disabled="status === 'processing'"
           @focus="handleFocus"
@@ -88,7 +88,7 @@
           </button>
         </div>
       </div>
-    </div> -->
+    </div>
 
     <div v-if="data && data.model_provider" class="node-metadata">
       <div class="metadata-item">
@@ -432,13 +432,17 @@ export default {
 
 <style scoped>
 .rewrite-node-expanded {
-  width: 580px;
+  width: 280px;
+  height: 300px;
   background: #fafafa;
   border: 2px solid hsl(var(--bc) / 0.2);
-  border-radius: 1rem;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+  border-radius: 0.75rem;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
   z-index: 2;
   transition: all 0.3s ease;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 .layout-shell.theme-dark .rewrite-node-expanded {
@@ -590,8 +594,15 @@ export default {
 }
 
 .node-section {
-  padding: 1rem 1.25rem;
+  padding: 0rem 1.25rem;
   border-bottom: 1px solid hsl(var(--bc) / 0.05);
+}
+
+.node-section-editor {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
 }
 
 .layout-shell.theme-dark .node-section {
@@ -607,7 +618,7 @@ export default {
 }
 
 .original-text {
-  padding: 0.75rem;
+  padding: 0.25rem;
   background: hsl(var(--b2));
   border-radius: 0.5rem;
   font-size: 0.875rem;
@@ -638,6 +649,8 @@ export default {
 
 .textarea-autocomplete-wrap {
   position: relative;
+  flex: 1;
+  min-height: 0;
 }
 
 .asset-autocomplete {
@@ -699,6 +712,7 @@ export default {
   gap: 1.5rem;
   font-size: 0.75rem;
   color: hsl(var(--bc) / 0.5);
+  margin-top: auto;
 }
 
 .metadata-item {

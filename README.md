@@ -190,14 +190,4 @@ AI分析每个场景，自动生成合适的镜头运动方案。
 - 项目地址：https://github.com/xhongc/ai_story
 
 
-# todo 
-执行队列等待
-新增原始文本节点
-新增抽取场景资产节点
-导出剪影有问题
-
-运镜生成完要刷新页面才有
-节点未完成被标记为完成
-执行失败的节点重复执行无效
-重新生成图片不生效
 uv run celery -A config worker -l info -P gevent

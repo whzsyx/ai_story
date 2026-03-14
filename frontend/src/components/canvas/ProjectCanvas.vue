@@ -184,7 +184,7 @@
           <div class="asset-drawer-header">
             <div>
               <div class="asset-drawer-title">资产变量</div>
-              <div class="asset-drawer-subtitle">绑定后在节点输入 <code>{{ "{{" }}</code> 即可联想选择变量</div>
+              <div class="asset-drawer-subtitle">绑定后在节点输入 <code>`{ {`</code> 即可联想选择变量</div>
             </div>
             <button class="btn btn-ghost btn-xs" @click.stop="showAssetDrawer = false">关闭</button>
           </div>
@@ -437,7 +437,7 @@ export default {
     // 节点位置配置（固定位置，由 FlowCanvas 自动居中）
     nodePositions() {
       return {
-        rewrite: { x: 50, y: 100 }
+        rewrite: { x: 370, y: 100 }
       };
     },
     nodeMetrics() {
@@ -529,7 +529,7 @@ export default {
         positions.rewrite = {
           ...this.nodePositions.rewrite,
           width: 580,
-          height: 400
+          height: 520
         };
       }
 
