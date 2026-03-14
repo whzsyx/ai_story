@@ -4,6 +4,7 @@
 遵循单一职责原则(SRP)和依赖倒置原则(DIP)
 """
 
+import inspect
 from typing import Dict, Any, Optional, List
 from django.db import transaction
 from django.db.models import Q, Avg, Sum
@@ -259,7 +260,8 @@ class ModelProviderService:
                 )
             elif provider.provider_type == 'image2video':
                 result = await ModelProviderService._test_image2video_provider(
-                    provider
+                    provider,
+                    test_prompt,
                 )
             else:
                 return {
@@ -386,16 +388,125 @@ class ModelProviderService:
         }
 
     @staticmethod
-    async def _test_image2video_provider(provider: ModelProvider) -> Dict[str, Any]:
+    async def _test_image2video_provider(
+        provider: ModelProvider,
+        prompt: str,
+    ) -> Dict[str, Any]:
         """测试图生视频提供商"""
-        # 这里返回模拟结果,实际实现需要调用对应的AI客户端
+        from core.ai_client.base import AIResponse
+        from core.ai_client.comfyui_client import ComfyUIClient
+        from core.ai_client.mock_image2video_client import MockImage2VideoClient
+        from core.ai_client.image2video_client import VideoGeneratorClient
+
+        extra_config = provider.extra_config or {}
+        image_url = (
+            extra_config.get('test_image_url')
+            or extra_config.get('image_url')
+            or extra_config.get('default_image_url')
+        )
+        if not image_url:
+            image_url = "mock"
+
+        duration = extra_config.get('duration', 5)
+        fps = extra_config.get('fps', 24)
+        negative_prompt = extra_config.get('negative_prompt', '')
+        aspect_ratio = extra_config.get('aspect_ratio', '16:9')
+        resolution = extra_config.get('resolution')
+        poll_interval = extra_config.get('poll_interval', 5)
+        max_wait_time = extra_config.get('max_wait_time', provider.timeout)
+
+        executor_class_path = provider.executor_class or provider.get_default_executor()
+
+        if executor_class_path == 'core.ai_client.comfyui_client.ComfyUIClient':
+            client = await sync_to_async(ComfyUIClient)(
+                api_url=provider.api_url,
+                api_key=provider.api_key,
+                model_name=provider.model_name,
+                timeout=provider.timeout,
+                max_tokens=provider.max_tokens,
+                temperature=provider.temperature,
+                top_p=provider.top_p,
+                **extra_config,
+            )
+            ai_response = await sync_to_async(client._generate_video)(
+                prompt=prompt,
+                negative_prompt=negative_prompt,
+                duration=duration,
+                fps=fps,
+                image_url=image_url,
+            )
+        elif executor_class_path == 'core.ai_client.mock_image2video_client.MockImage2VideoClient':
+            client = await sync_to_async(MockImage2VideoClient)(
+                api_url=provider.api_url,
+                api_key=provider.api_key,
+                model_name=provider.model_name,
+                timeout=provider.timeout,
+                max_tokens=provider.max_tokens,
+                temperature=provider.temperature,
+                top_p=provider.top_p,
+                **extra_config,
+            )
+            ai_response = await sync_to_async(client._generate_video)(
+                prompt=prompt,
+                negative_prompt=negative_prompt,
+                duration=duration,
+                fps=fps,
+                image_url=image_url,
+            )
+        else:
+            client = await sync_to_async(VideoGeneratorClient)(
+                api_url=provider.api_url,
+                api_token=provider.api_key,
+                model=provider.model_name,
+            )
+            generate_kwargs = {
+                'prompt': prompt,
+                'model': provider.model_name,
+                'image_uri': image_url,
+                'duration_seconds': duration,
+                'aspect_ratio': aspect_ratio,
+                'resolution': resolution,
+                'negative_prompt': negative_prompt,
+                'poll_interval': poll_interval,
+                'max_wait_time': max_wait_time,
+            }
+            generate_kwargs.update(extra_config.get('test_generate_kwargs', {}))
+
+            generate_func = client._generate_video
+            signature = inspect.signature(generate_func)
+            if 'fps' in signature.parameters:
+                generate_kwargs['fps'] = fps
+
+            video_data = await sync_to_async(generate_func)(**generate_kwargs)
+            ai_response = AIResponse(
+                success=True,
+                data=[{'url': url} if isinstance(url, str) else url for url in video_data],
+                metadata={
+                    'model': provider.model_name,
+                    'duration': duration,
+                    'fps': fps,
+                    'aspect_ratio': aspect_ratio,
+                },
+            )
+
+        success = ai_response.success
+        data = ai_response.data or []
+        metadata = ai_response.metadata or {}
+        error = ai_response.error
+        text = ai_response.text
+
         return {
-            'success': True,
-            'text': 'Image2Video test successful',
+            'success': success,
+            'text': text or ('Image2Video test successful' if success else ''),
             'data': {
-                'provider': provider.name
+                'prompt': prompt,
+                'provider': provider.name,
+                'videos': data,
+                'metadata': metadata,
+                'test_image_url': image_url,
             },
-            'tokens_used': 0
+            'tokens_used': metadata.get('usage', {}).get('total_tokens', 0),
+            'error': error,
         }
 
 

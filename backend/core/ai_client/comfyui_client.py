@@ -6,17 +6,15 @@ ComfyUI 文生图客户端实现
 import json
 import time
 import uuid
-import asyncio
 import os
 from typing import Dict, Any, Optional, Callable
 from io import BytesIO
 from PIL import Image
 
-import aiohttp
 import requests
 import websocket
 
-from .base import Text2ImageClient as BaseText2ImageClient, AIResponse
+from .base import Text2ImageClient as BaseText2ImageClient
 from core.utils.file_storage import image_storage, video_storage
 
 

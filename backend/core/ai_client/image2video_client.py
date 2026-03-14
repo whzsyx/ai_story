@@ -22,7 +22,7 @@ class TaskStatus(Enum):
     UNKNOWN = "Unknown"
 
 
-class VideoGenerator:
+class VideoGeneratorClient:
     """视频生成客户端"""
 
 
@@ -56,7 +56,7 @@ class VideoGenerator:
         seed: Optional[int] = None,
         negative_prompt: Optional[str] = None,
         person_generation: str = "allow_adult"
-    ) -> str:
+    ) -> Any:
         """创建视频生成任务
 
         Args:
@@ -114,19 +114,26 @@ class VideoGenerator:
         #     "parameters": parameters,
         #     "model": model
         # }
+        file_path = image_uri.get("url") if isinstance(image_uri, dict) else image_uri
+
         payload = {
             "width": 720,
             "height": 1280,
             "model": model,
             "prompt": prompt,
-            "filePaths": [image_uri.get("url")]
+            "filePaths": [file_path] if file_path else []
         }
         try:
             response = requests.post(url, json=payload, headers=self.headers)
             response.raise_for_status()
             result = response.json()
             print(result)
-            return result["data"] # [{"url": "xx"}]
+            data = result.get("data")
+            if isinstance(data, list):
+                return data
+            if isinstance(data, dict):
+                return data.get("task_id") or data.get("id") or data
+            return result.get("task_id") or result.get("id") or data
         except requests.exceptions.RequestException as e:
             raise Exception(f"创建视频任务失败: {str(e)}")
 
@@ -191,7 +198,7 @@ class VideoGenerator:
             # 等待后继续轮询
             time.sleep(poll_interval)
 
-    def generate_video_sync(
+    def _generate_video(
         self,
         prompt: str,
         poll_interval: int = 5,
@@ -210,7 +217,21 @@ class VideoGenerator:
             视频下载链接列表
         """
         # 创建任务
-        task_id = self.create_video_task(prompt, **kwargs)
+        task_result = self.create_video_task(prompt, **kwargs)
+
+        if isinstance(task_result, list):
+            video_urls = []
+            for item in task_result:
+                url = item.get("url") if isinstance(item, dict) else item
+                if url:
+                    video_urls.append(url)
+            print(f"✓ 视频生成完成! 共 {len(video_urls)} 个视频")
+            return video_urls
+
+        task_id = task_result
+        if isinstance(task_result, dict):
+            task_id = task_result.get("task_id") or task_result.get("id")
+
         print(f"✓ 任务已创建: {task_id}")
 
         # 状态回调
@@ -233,4 +254,3 @@ class VideoGenerator:
 
         print(f"✓ 视频生成完成! 共 {len(video_urls)} 个视频")
         return video_urls
-
