@@ -40,7 +40,7 @@ class ModelProviderServiceImage2VideoTestCase(TestCase):
             api_url='http://localhost:9000',
             api_key='secret',
             model_name='video-model',
-            executor_class='core.ai_client.image2video_client.Image2VideoClient',
+            executor_class='core.ai_client.image2video_client.VideoGeneratorClient',
             timeout=30,
             extra_config={
                 'test_image_url': 'http://example.com/test.png',

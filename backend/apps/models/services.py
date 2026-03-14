@@ -453,7 +453,10 @@ class ModelProviderService:
                 fps=fps,
                 image_url=image_url,
             )
-        else:
+        elif executor_class_path in (
+            'core.ai_client.image2video_client.VideoGeneratorClient',
+            'core.ai_client.image2video_client.Image2VideoClient',
+        ):
             client = await sync_to_async(VideoGeneratorClient)(
                 api_url=provider.api_url,
                 api_token=provider.api_key,
@@ -488,6 +491,8 @@ class ModelProviderService:
                     'aspect_ratio': aspect_ratio,
                 },
             )
+        else:
+            raise ImportError(f'不支持的图生视频执行器: {executor_class_path}')
 
         success = ai_response.success
         data = ai_response.data or []

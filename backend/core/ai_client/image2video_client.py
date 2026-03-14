@@ -34,19 +34,19 @@ class VideoGeneratorClient:
     )
     URL_PATTERN = re.compile(r'https?://\S+')
 
-    def __init__(self, api_url: str, api_token: str, model: str):
+    def __init__(self, api_url: str, api_key: str, model_name: str, **kwargs):
         """初始化视频生成客户端
 
         Args:
             api_url: API地址或基础地址
-            api_token: API认证令牌
-            model: 模型名称
+            api_key: API认证令牌
+            model_name: 模型名称
         """
-        self.api_token = api_token
+        self.api_token = api_key
         self.base_url = api_url
-        self.model = model
+        self.model = model_name
         self.headers = {
-            "Authorization": f"Bearer {api_token}",
+            "Authorization": f"Bearer {api_key}",
             "Content-Type": "application/json"
         }
 
@@ -106,7 +106,8 @@ class VideoGeneratorClient:
         resolution: Optional[str] = None,
         seed: Optional[int] = None,
         negative_prompt: Optional[str] = None,
-        person_generation: str = "allow_adult"
+        person_generation: str = "allow_adult",
+        **kwargs
     ) -> Any:
         """创建视频生成任务
 
@@ -189,7 +190,7 @@ class VideoGeneratorClient:
         if image_uri or image_base64:
             image_data = {"mimeType": image_mime_type}
             if image_uri:
-                image_data["uri"] = image_uri.get("url", image_uri)
+                image_data["uri"] = image_uri.get("url", image_uri) if isinstance(image_uri, dict) else image_uri
             if image_base64:
                 image_data["bytesBase64Encoded"] = image_base64
             instance["image"] = image_data
@@ -343,3 +344,9 @@ class VideoGeneratorClient:
 
         print(f"✓ 视频生成完成! 共 {len(video_urls)} 个视频")
         return video_urls
+
+
+class Image2VideoClient(VideoGeneratorClient):
+    """兼容旧配置的图生视频客户端别名"""
+
+    pass
