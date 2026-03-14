@@ -80,6 +80,7 @@
       @mouseup="handleMouseUp"
       @mouseleave="handleMouseUp"
       @wheel="handleWheel"
+      @dblclick="handleCanvasDoubleClick"
     >
       <!-- 可变换的画布内容 -->
       <div
@@ -328,6 +329,17 @@ export default {
       e.preventDefault();
       const delta = e.deltaY > 0 ? 0.98 : 1.02;
       this.setScale(this.scale * delta);
+    },
+
+    handleCanvasDoubleClick(event) {
+      const target = event.target;
+      if (!(target instanceof Element)) {
+        return;
+      }
+
+      if (target.classList.contains("canvas-container") || target.classList.contains("canvas-content")) {
+        this.resetView();
+      }
     }
   }
 };
