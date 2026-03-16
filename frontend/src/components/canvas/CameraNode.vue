@@ -1,7 +1,7 @@
 <template>
   <div
     class="camera-node"
-    :class="`status-${status}`"
+    :class="[{ 'node-highlighted': isHighlighted }, `status-${status}`]"
     :style="nodeStyle"
     @dblclick="handleNodeDoubleClick"
   >
@@ -155,6 +155,10 @@ export default {
     canGenerate: {
       type: Boolean,
       default: true
+    },
+    isHighlighted: {
+      type: Boolean,
+      default: false
     }
   },
   data() {
@@ -461,3 +465,25 @@ export default {
 }
 
 </style>
+
+
+.node-highlighted {
+  animation: node-highlight-pulse 1.4s ease;
+}
+
+@keyframes node-highlight-pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(20, 184, 166, 0.45);
+    transform: translateY(0);
+    border-color: rgba(20, 184, 166, 0.75);
+  }
+  50% {
+    box-shadow: 0 0 0 8px rgba(20, 184, 166, 0.12);
+    transform: translateY(-2px);
+    border-color: rgba(20, 184, 166, 0.85);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(20, 184, 166, 0);
+    transform: translateY(0);
+  }
+}

@@ -351,6 +351,7 @@
             :index="index"
             :position="calculateStoryboardPosition(index)"
             :asset-options="boundAssets"
+            :is-highlighted="Boolean(nodeHighlights.storyboards[storyboard.id])"
             @node-dblclick="focusCanvasNode(`storyboard-${index}`)"
             @save="handleSaveStoryboard"
             @chat-edit="handleOpenStoryboardChat"
@@ -384,6 +385,7 @@
             :storyboard-id="storyboard.id"
             :camera-id="getCameraId(storyboard)"
             :can-generate="getImageStatus(storyboard) === 'completed'"
+            :is-highlighted="Boolean(nodeHighlights.cameras[getCameraId(storyboard) || storyboard.id])"
             @node-dblclick="focusCanvasNode(`camera-${index}`)"
             @generate="handleGenerateCamera"
             @save="handleSaveCamera"
@@ -511,6 +513,10 @@ export default {
         images: {}, // { storyboardId: true }
         cameras: {}, // { storyboardId: true }
         videos: {} // { storyboardId: true }
+      },
+      nodeHighlights: {
+        storyboards: {},
+        cameras: {},
       },
       // 跟踪正在执行的阶段（用于整个阶段的 loading 状态）
       executingStages: {
@@ -1229,12 +1235,15 @@ export default {
             data: message.applyPatch,
             silent: false,
           });
+          this.flashNodeHighlight('storyboards', this.nodeChat.storyboardId);
         } else {
           this.handleSaveCamera({
             cameraId: this.nodeChat.cameraId,
+            storyboardId: this.nodeChat.storyboardId,
             data: message.applyPatch,
             silent: false,
           });
+          this.flashNodeHighlight('cameras', this.nodeChat.cameraId || this.nodeChat.storyboardId);
         }
         this.nodeChat.messages = this.nodeChat.messages.map(item => ({
           ...item,
@@ -1583,6 +1592,49 @@ export default {
       this.$emit('save-stage', { stageType, outputData, silent, skipRefresh });
     },
 
+    findStoryboardById(storyboardId) {
+      return this.storyboards.find(item => item.id === storyboardId) || null;
+    },
+
+    applyLocalStoryboardPatch(storyboardId, patch = {}) {
+      const storyboard = this.findStoryboardById(storyboardId);
+      if (!storyboard) {
+        return;
+      }
+
+      Object.keys(patch).forEach((key) => {
+        this.$set(storyboard, key, patch[key]);
+      });
+    },
+
+    applyLocalCameraPatch({ cameraId = null, storyboardId = null, patch = {} }) {
+      const storyboard = storyboardId
+        ? this.findStoryboardById(storyboardId)
+        : this.storyboards.find(item => item.camera_movement?.data?.id === cameraId) || null;
+
+      if (!storyboard || !storyboard.camera_movement?.data) {
+        return;
+      }
+
+      const cameraData = storyboard.camera_movement.data;
+      if (Object.prototype.hasOwnProperty.call(patch, 'movement_type')) {
+        this.$set(cameraData, 'movement_type', patch.movement_type);
+      }
+      if (Object.prototype.hasOwnProperty.call(patch, 'movement_params')) {
+        this.$set(cameraData, 'movement_params', patch.movement_params);
+      }
+    },
+
+    flashNodeHighlight(type, key) {
+      if (!type || !key) {
+        return;
+      }
+      this.$set(this.nodeHighlights[type], key, true);
+      window.setTimeout(() => {
+        this.$delete(this.nodeHighlights[type], key);
+      }, 1400);
+    },
+
     async handleGenerateImage({ storyboardId, prompt, forceRegenerate = false }) {
       console.log('[ProjectCanvas] 生成图片:', { storyboardId, prompt, forceRegenerate });
 
@@ -1736,10 +1788,12 @@ export default {
     },
 
     handleSaveStoryboard({ storyboardId, data, silent }) {
+      this.applyLocalStoryboardPatch(storyboardId, data);
       this.$emit('save-storyboard', { storyboardId, data, silent });
     },
 
-    handleSaveCamera({ cameraId, data, silent }) {
+    handleSaveCamera({ cameraId, data, silent, storyboardId = null }) {
+      this.applyLocalCameraPatch({ cameraId, storyboardId, patch: data });
       this.$emit('save-camera', { cameraId, data, silent });
     },
 
