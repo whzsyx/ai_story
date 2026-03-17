@@ -133,7 +133,7 @@
             <textarea
               ref="rewriteTextarea"
               v-model="localText"
-              class="textarea textarea-bordered w-full rewrite-textarea"
+              class="textarea w-full rewrite-textarea"
               rows="3"
               placeholder="改写后的文案将显示在这里..."
               :disabled="status === 'processing'"
@@ -544,75 +544,78 @@ export default {
 <style scoped>
 .rewrite-node-expanded {
   width: 620px;
-  height: 300px;
-  background: #fafafa;
-  border: 2px solid hsl(var(--bc) / 0.2);
-  border-radius: 0.75rem;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-  z-index: 2;
-  transition: all 0.3s ease;
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid rgba(148, 163, 184, 0.1);
+  border-radius: 18px;
+  box-shadow: 0 18px 40px rgba(15, 23, 42, 0.12);
+  overflow: hidden;
   display: flex;
   flex-direction: column;
-  overflow: hidden;
 }
 
 .layout-shell.theme-dark .rewrite-node-expanded {
-  background: #0f172a;
-  border-color: hsl(var(--bc) / 0.28);
-  box-shadow: 0 6px 20px rgba(2, 6, 23, 0.6);
+  background: rgba(15, 23, 42, 0.92);
+  border-color: rgba(148, 163, 184, 0.14);
+  box-shadow: 0 20px 44px rgba(2, 6, 23, 0.45);
 }
 
 .rewrite-node-expanded:hover {
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15);
+  transform: translateY(-4px);
+  box-shadow: 0 24px 48px rgba(14, 165, 233, 0.16);
+  border-color: rgba(14, 165, 233, 0.18);
 }
 
 .layout-shell.theme-dark .rewrite-node-expanded:hover {
-  box-shadow: 0 8px 24px rgba(2, 6, 23, 0.75);
+  box-shadow: 0 24px 48px rgba(14, 165, 233, 0.16);
 }
 
 .status-pending {
-  border-color: hsl(var(--bc) / 0.3);
+  border-color: rgba(148, 163, 184, 0.1);
 }
 
 .status-processing {
-  border-color: hsl(var(--in));
-  background: #f0f8ff;
+  border-color: rgba(14, 165, 233, 0.14);
+  background: rgba(240, 249, 255, 0.96);
 }
 
 .layout-shell.theme-dark .status-processing {
-  background: rgba(14, 116, 144, 0.2);
+  border-color: rgba(56, 189, 248, 0.18);
+  background: rgba(14, 116, 144, 0.16);
 }
 
 .status-completed {
-  border-color: hsl(var(--su));
-  background: #fafafa;
+  border-color: rgba(34, 197, 94, 0.12);
+  background: rgba(255, 255, 255, 0.92);
 }
 
 .layout-shell.theme-dark .status-completed {
-  background: #0f172a;
+  border-color: rgba(74, 222, 128, 0.16);
+  background: rgba(15, 23, 42, 0.92);
 }
 
 .status-failed {
-  border-color: hsl(var(--er));
-  background: #fef2f2;
+  border-color: rgba(248, 113, 113, 0.14);
+  background: rgba(254, 242, 242, 0.92);
 }
 
 .layout-shell.theme-dark .status-failed {
-  background: rgba(127, 29, 29, 0.2);
+  border-color: rgba(248, 113, 113, 0.18);
+  background: rgba(127, 29, 29, 0.16);
 }
 
 .node-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0.25rem 1.25rem;
-  border-bottom: 1px solid hsl(var(--bc) / 0.1);
-  background: hsl(var(--b2) / 0.5);
+  gap: 1rem;
+  padding: 0.9rem 1.1rem;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.14);
+  background: linear-gradient(180deg, rgba(248, 250, 252, 0.96), rgba(255, 255, 255, 0.88));
 }
 
 .layout-shell.theme-dark .node-header {
-  border-bottom-color: hsl(var(--bc) / 0.2);
-  background: hsl(var(--b2) / 0.6);
+  border-bottom-color: rgba(148, 163, 184, 0.18);
+  background: linear-gradient(180deg, rgba(15, 23, 42, 0.98), rgba(15, 23, 42, 0.9));
 }
 
 .header-left {
@@ -717,19 +720,18 @@ export default {
 .sub-node {
   flex: 1;
   min-width: 0;
-  background: #fafafa;
-  border: 2px solid hsl(var(--bc) / 0.18);
-  border-radius: 0.75rem;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  background: rgba(255, 255, 255, 0.9);
+  border-radius: 18px;
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.08);
   overflow: hidden;
   display: flex;
   flex-direction: column;
 }
 
 .layout-shell.theme-dark .sub-node {
-  background: #0f172a;
-  border-color: hsl(var(--bc) / 0.24);
-  box-shadow: 0 4px 16px rgba(2, 6, 23, 0.45);
+  background: rgba(15, 23, 42, 0.86);
+  border-color: rgba(148, 163, 184, 0.12);
+  box-shadow: 0 14px 30px rgba(2, 6, 23, 0.4);
 }
 
 .sub-node-original {
@@ -738,7 +740,12 @@ export default {
 }
 
 .sub-node-original .sub-node-header {
-  padding: 0.45rem 0.7rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.8rem 0.9rem;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.14);
+  background: linear-gradient(180deg, rgba(248, 250, 252, 0.96), rgba(255, 255, 255, 0.88));
 }
 
 .sub-node-original .sub-node-title-wrap {
@@ -775,14 +782,14 @@ export default {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0.75rem 0.9rem;
-  border-bottom: 1px solid hsl(var(--bc) / 0.08);
-  background: hsl(var(--b2) / 0.45);
+  padding: 0.8rem 0.9rem;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.14);
+  background: linear-gradient(180deg, rgba(248, 250, 252, 0.96), rgba(255, 255, 255, 0.88));
 }
 
 .layout-shell.theme-dark .sub-node-header {
-  border-bottom-color: hsl(var(--bc) / 0.16);
-  background: hsl(var(--b2) / 0.55);
+  border-bottom-color: rgba(148, 163, 184, 0.18);
+  background: linear-gradient(180deg, rgba(15, 23, 42, 0.96), rgba(15, 23, 42, 0.88));
 }
 
 .sub-node-title-wrap {
@@ -828,7 +835,6 @@ export default {
   height: 100%;
   padding: 0.55rem 0.65rem;
   background: rgba(248, 250, 252, 0.9);
-  border: 1px solid rgba(148, 163, 184, 0.16);
   border-radius: 12px;
   font-size: 0.875rem;
   line-height: 1.6;
@@ -870,16 +876,28 @@ export default {
   height: 100%;
   padding: 0.8rem 0.9rem;
   border-radius: 12px;
-  border-color: rgba(148, 163, 184, 0.18);
   background: rgba(248, 250, 252, 0.92);
   line-height: 1.6;
   resize: none;
+  box-shadow: none;
 }
 
 .layout-shell.theme-dark .rewrite-textarea {
   background: rgba(15, 23, 42, 0.78);
-  border-color: rgba(148, 163, 184, 0.16);
+  border-color: rgba(148, 163, 184, 0.1);
   color: hsl(var(--bc) / 0.88);
+  box-shadow: none;
+}
+
+.rewrite-textarea:focus {
+  outline: none;
+  border-color: rgba(14, 165, 233, 0.14);
+  box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.08);
+}
+
+.layout-shell.theme-dark .rewrite-textarea:focus {
+  border-color: rgba(56, 189, 248, 0.16);
+  box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.08);
 }
 
 .asset-autocomplete {
@@ -900,7 +918,18 @@ export default {
   z-index: 20;
 }
 
-.layout-shell.theme-dark .asset-autocomplete {
+.layout-shell.theme-dark .rewrite-textarea:focus {
+  outline: none;
+  border-color: rgba(14, 165, 233, 0.14);
+  box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.08);
+}
+
+.layout-shell.theme-dark .rewrite-textarea:focus {
+  border-color: rgba(56, 189, 248, 0.16);
+  box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.08);
+}
+
+.asset-autocomplete {
   background: rgba(15, 23, 42, 0.96);
   box-shadow: 0 16px 32px rgba(2, 6, 23, 0.62);
 }
@@ -924,7 +953,7 @@ export default {
 
 .asset-autocomplete-item:hover,
 .asset-autocomplete-item.active {
-  border-color: rgba(14, 165, 233, 0.28);
+  border-color: rgba(14, 165, 233, 0.18);
   transform: translateY(-1px);
 }
 

@@ -436,67 +436,73 @@ export default {
 <style scoped>
 .storyboard-node {
   width: 280px;
-  background: #fafafa;
-  border: 2px solid hsl(var(--bc) / 0.2);
-  border-radius: 0.75rem;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid rgba(148, 163, 184, 0.1);
+  border-radius: 18px;
+  box-shadow: 0 18px 40px rgba(15, 23, 42, 0.12);
   z-index: 2;
-  transition: all 0.3s ease;
+  transition: transform 0.25s ease, box-shadow 0.25s ease, border-color 0.25s ease;
+  overflow: hidden;
 }
 
 .layout-shell.theme-dark .storyboard-node {
-  background: #0f172a;
-  border-color: hsl(var(--bc) / 0.28);
-  box-shadow: 0 4px 16px rgba(2, 6, 23, 0.6);
+  background: rgba(15, 23, 42, 0.92);
+  border-color: rgba(148, 163, 184, 0.14);
+  box-shadow: 0 20px 44px rgba(2, 6, 23, 0.45);
 }
 
 .storyboard-node:hover {
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15);
+  transform: translateY(-4px);
+  box-shadow: 0 24px 48px rgba(14, 165, 233, 0.16);
+  border-color: rgba(14, 165, 233, 0.18);
 }
 
 .layout-shell.theme-dark .storyboard-node:hover {
-  box-shadow: 0 6px 18px rgba(2, 6, 23, 0.75);
+  box-shadow: 0 24px 48px rgba(14, 165, 233, 0.16);
 }
 
 .status-pending {
-  border-color: hsl(var(--bc) / 0.2);
-  background: #fafafa;
+  border-color: rgba(148, 163, 184, 0.1);
+  background: rgba(255, 255, 255, 0.92);
 }
 
 .layout-shell.theme-dark .status-pending {
-  background: #0f172a;
+  border-color: rgba(148, 163, 184, 0.14);
+  background: rgba(15, 23, 42, 0.92);
 }
 
 .status-processing {
-  border-color: hsl(var(--wa));
-  background: #fffbeb;
+  border-color: rgba(245, 158, 11, 0.14);
+  background: rgba(255, 251, 235, 0.94);
 }
 
 .layout-shell.theme-dark .status-processing {
-  background: rgba(120, 53, 15, 0.2);
+  border-color: rgba(251, 191, 36, 0.18);
+  background: rgba(120, 53, 15, 0.16);
 }
 
 .status-completed {
-  border-color: hsl(var(--su));
-  background: #f0fdf4;
+  border-color: rgba(34, 197, 94, 0.12);
+  background: rgba(240, 253, 244, 0.9);
 }
 
 .layout-shell.theme-dark .status-completed {
-  background: rgba(20, 83, 45, 0.2);
+  border-color: rgba(74, 222, 128, 0.16);
+  background: rgba(20, 83, 45, 0.16);
 }
 
 .node-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0.625rem 0.875rem;
-  border-bottom: 1px solid hsl(var(--bc) / 0.1);
-  background: hsl(var(--b2) / 0.3);
+  padding: 0.8rem 0.9rem;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.14);
+  background: linear-gradient(180deg, rgba(248, 250, 252, 0.96), rgba(255, 255, 255, 0.88));
 }
 
 .layout-shell.theme-dark .node-header {
-  border-bottom-color: hsl(var(--bc) / 0.2);
-  background: hsl(var(--b2) / 0.45);
+  border-bottom-color: rgba(148, 163, 184, 0.18);
+  background: linear-gradient(180deg, rgba(15, 23, 42, 0.98), rgba(15, 23, 42, 0.9));
 }
 
 .header-left {
@@ -531,12 +537,12 @@ export default {
 }
 
 .node-section {
-  padding: 0.15rem 0.875rem;
-  border-bottom: 1px solid hsl(var(--bc) / 0.05);
+  padding: 0.15rem 0.9rem;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.12);
 }
 
 .layout-shell.theme-dark .node-section {
-  border-bottom-color: hsl(var(--bc) / 0.15);
+  border-bottom-color: rgba(148, 163, 184, 0.16);
 }
 
 .node-section-compact {
@@ -606,7 +612,7 @@ export default {
 
 .asset-autocomplete-item:hover,
 .asset-autocomplete-item.active {
-  border-color: rgba(14, 165, 233, 0.28);
+  border-color: rgba(14, 165, 233, 0.18);
   transform: translateY(-1px);
 }
 </style>

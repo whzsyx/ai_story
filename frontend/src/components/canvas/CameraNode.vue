@@ -299,78 +299,85 @@ export default {
 .camera-node {
   width: 250px;
   min-height: 280px;
-  background: #fafafa;
-  border: 2px solid hsl(var(--bc) / 0.2);
-  border-radius: 0.75rem;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid rgba(148, 163, 184, 0.1);
+  border-radius: 18px;
+  box-shadow: 0 18px 40px rgba(15, 23, 42, 0.12);
   z-index: 2;
-  transition: all 0.3s ease;
+  transition: transform 0.25s ease, box-shadow 0.25s ease, border-color 0.25s ease;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
 }
 
 .layout-shell.theme-dark .camera-node {
-  background: #0f172a;
-  border-color: hsl(var(--bc) / 0.28);
-  box-shadow: 0 4px 16px rgba(2, 6, 23, 0.6);
+  background: rgba(15, 23, 42, 0.92);
+  border-color: rgba(148, 163, 184, 0.14);
+  box-shadow: 0 20px 44px rgba(2, 6, 23, 0.45);
 }
 
 .camera-node:hover {
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15);
+  transform: translateY(-4px);
+  box-shadow: 0 24px 48px rgba(14, 165, 233, 0.16);
+  border-color: rgba(14, 165, 233, 0.18);
 }
 
 .layout-shell.theme-dark .camera-node:hover {
-  box-shadow: 0 6px 18px rgba(2, 6, 23, 0.75);
+  box-shadow: 0 24px 48px rgba(14, 165, 233, 0.16);
 }
 
 .status-pending {
-  border-color: hsl(var(--bc) / 0.2);
-  background: #fafafa;
+  border-color: rgba(148, 163, 184, 0.1);
+  background: rgba(255, 255, 255, 0.92);
 }
 
 .layout-shell.theme-dark .status-pending {
-  background: #0f172a;
+  border-color: rgba(148, 163, 184, 0.14);
+  background: rgba(15, 23, 42, 0.92);
 }
 
 .status-processing {
-  border-color: hsl(var(--in));
-  background: #f0f8ff;
+  border-color: rgba(14, 165, 233, 0.14);
+  background: rgba(240, 249, 255, 0.96);
 }
 
 .layout-shell.theme-dark .status-processing {
-  background: rgba(14, 116, 144, 0.2);
+  border-color: rgba(56, 189, 248, 0.18);
+  background: rgba(14, 116, 144, 0.16);
 }
 
 .status-completed {
-  border-color: hsl(var(--su));
-  background: #fafafa;
+  border-color: rgba(34, 197, 94, 0.12);
+  background: rgba(255, 255, 255, 0.92);
 }
 
 .layout-shell.theme-dark .status-completed {
-  background: #0f172a;
+  border-color: rgba(74, 222, 128, 0.16);
+  background: rgba(15, 23, 42, 0.92);
 }
 
 .status-failed {
-  border-color: hsl(var(--er));
-  background: #fef2f2;
+  border-color: rgba(248, 113, 113, 0.14);
+  background: rgba(254, 242, 242, 0.92);
 }
 
 .layout-shell.theme-dark .status-failed {
-  background: rgba(127, 29, 29, 0.2);
+  border-color: rgba(248, 113, 113, 0.18);
+  background: rgba(127, 29, 29, 0.16);
 }
 
 .node-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0.625rem 0.875rem;
-  border-bottom: 1px solid hsl(var(--bc) / 0.1);
-  background: hsl(var(--b2) / 0.3);
+  padding: 0.8rem 0.9rem;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.14);
+  background: linear-gradient(180deg, rgba(248, 250, 252, 0.96), rgba(255, 255, 255, 0.88));
 }
 
 .layout-shell.theme-dark .node-header {
-  border-bottom-color: hsl(var(--bc) / 0.2);
-  background: hsl(var(--b2) / 0.45);
+  border-bottom-color: rgba(148, 163, 184, 0.18);
+  background: linear-gradient(180deg, rgba(15, 23, 42, 0.98), rgba(15, 23, 42, 0.9));
 }
 
 .header-left {
@@ -400,12 +407,12 @@ export default {
 }
 
 .node-content {
-  padding: 0.75rem 0.875rem;
-  border-bottom: 1px solid hsl(var(--bc) / 0.05);
+  padding: 0.85rem 0.9rem;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.12);
 }
 
 .layout-shell.theme-dark .node-content {
-  border-bottom-color: hsl(var(--bc) / 0.15);
+  border-bottom-color: rgba(148, 163, 184, 0.16);
 }
 
 .content-label {
@@ -417,22 +424,22 @@ export default {
 }
 
 .node-description {
-  padding: 0.75rem 0.875rem;
-  border-bottom: 1px solid hsl(var(--bc) / 0.05);
+  padding: 0.85rem 0.9rem;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.12);
 }
 
 .layout-shell.theme-dark .node-description {
-  border-bottom-color: hsl(var(--bc) / 0.15);
+  border-bottom-color: rgba(148, 163, 184, 0.16);
 }
 
 .description-textarea {
   font-size: 0.75rem;
   line-height: 1.5;
   color: hsl(var(--bc) / 0.7);
-  background: hsl(var(--b2) / 0.3);
-  padding: 0.625rem;
-  border-radius: 0.375rem;
-  border: 1px solid hsl(var(--bc) / 0.1);
+  background: rgba(248, 250, 252, 0.92);
+  padding: 0.75rem;
+  border-radius: 12px;
+  border: 1px solid rgba(148, 163, 184, 0.12);
   margin: 0;
   white-space: pre-wrap;
   word-break: break-word;
@@ -444,9 +451,9 @@ export default {
 }
 
 .layout-shell.theme-dark .description-textarea {
-  background: hsl(var(--b2) / 0.6);
-  border-color: hsl(var(--bc) / 0.2);
-  color: hsl(var(--bc) / 0.8);
+  background: rgba(15, 23, 42, 0.78);
+  border-color: rgba(148, 163, 184, 0.12);
+  color: hsl(var(--bc) / 0.88);
 }
 
 .description-textarea:focus {

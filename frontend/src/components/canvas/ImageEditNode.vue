@@ -154,7 +154,7 @@ export default {
 .image-edit-node {
   width: 250px;
   background: rgba(255, 255, 255, 0.92);
-  border: 1px solid rgba(15, 23, 42, 0.08);
+  border: 1px solid rgba(148, 163, 184, 0.1);
   border-radius: 18px;
   box-shadow: 0 18px 40px rgba(15, 23, 42, 0.12);
   overflow: hidden;
@@ -169,7 +169,7 @@ export default {
 
 .layout-shell.theme-dark .image-edit-node {
   background: rgba(15, 23, 42, 0.92);
-  border-color: rgba(148, 163, 184, 0.2);
+  border-color: rgba(148, 163, 184, 0.14);
   box-shadow: 0 20px 44px rgba(2, 6, 23, 0.45);
 }
 
