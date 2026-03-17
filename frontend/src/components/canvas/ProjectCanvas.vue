@@ -350,6 +350,7 @@
           :available-assets="availableAssets"
           @execute="handleExecuteStage"
           @asset-bindings-updated="$emit('asset-bindings-updated')"
+          @node-dblclick="focusCanvasNode('assetExtraction')"
         />
 
         <!-- 每个分镜及其子节点 -->

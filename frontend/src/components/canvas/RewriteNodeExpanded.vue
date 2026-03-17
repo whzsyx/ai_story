@@ -28,6 +28,7 @@
       <div class="header-right">
         <div class="action-icons">
           <button
+            v-if="showRewriteNode"
             class="icon-btn"
             :class="{ 'icon-btn-disabled': status === 'processing' || isExecuting || isGeneratingStoryboard }"
             :disabled="status === 'processing' || isExecuting || isGeneratingStoryboard"
@@ -544,6 +545,8 @@ export default {
 <style scoped>
 .rewrite-node-expanded {
   width: 620px;
+  height: clamp(280px, 38vh, 420px);
+  max-height: 420px;
   background: rgba(255, 255, 255, 0.92);
   border: 1px solid rgba(148, 163, 184, 0.1);
   border-radius: 18px;
@@ -874,6 +877,8 @@ export default {
   flex: 1;
   min-height: 0;
   height: 100%;
+  max-height: 100%;
+  overflow-y: auto;
   padding: 0.8rem 0.9rem;
   border-radius: 12px;
   background: rgba(248, 250, 252, 0.92);

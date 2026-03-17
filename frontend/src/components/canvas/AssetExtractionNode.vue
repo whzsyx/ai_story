@@ -3,12 +3,12 @@
     class="asset-extraction-node"
     :class="`status-${effectiveStatus}`"
     :style="nodeStyle"
+    @dblclick="handleNodeDoubleClick"
   >
     <div class="node-top">
       <div class="card-top">
         <div class="card-title-wrap">
           <span class="card-title">资产抽取</span>
-          <span class="card-subtitle">来源：{{ sourceTypeText }}</span>
         </div>
         <button
           class="pill-action"
@@ -22,7 +22,6 @@
 
       <div class="card-meta">
         <span class="meta-chip">{{ itemCount }} 项待处理</span>
-        <span v-if="data && data.updated_at" class="meta-chip">{{ formatDate(data.updated_at) }}</span>
       </div>
     </div>
 
@@ -167,6 +166,18 @@ export default {
   },
   methods: {
     formatDate,
+    handleNodeDoubleClick(event) {
+      if (!(event.target instanceof Element)) {
+        this.$emit('node-dblclick');
+        return;
+      }
+
+      if (event.target.closest('button, input, textarea, select, option, video, [contenteditable="true"], .prevent-canvas-wheel')) {
+        return;
+      }
+
+      this.$emit('node-dblclick');
+    },
     confidenceText(value) {
       const number = Number(value || 0);
       return `置信度 ${Math.round(number * 100)}%`;
@@ -279,22 +290,20 @@ export default {
   transition: transform 0.25s ease, box-shadow 0.25s ease, border-color 0.25s ease;
 }
 
-.asset-extraction-node::before {
-  content: '';
-  display: block;
-  height: 3px;
-  background: linear-gradient(90deg, #22d3ee 0%, #38bdf8 55%, #818cf8 100%);
-}
-
 .asset-extraction-node:hover {
   transform: translateY(-4px);
   box-shadow: 0 24px 52px rgba(15, 23, 42, 0.14);
+  border-color: rgba(14, 165, 233, 0.18);
 }
 
 .layout-shell.theme-dark .asset-extraction-node {
   background: rgba(15, 23, 42, 0.92);
   border-color: rgba(148, 163, 184, 0.2);
   box-shadow: 0 18px 40px rgba(2, 6, 23, 0.4);
+}
+
+.layout-shell.theme-dark .asset-extraction-node:hover {
+  border-color: rgba(56, 189, 248, 0.22);
 }
 
 .node-top,
@@ -469,7 +478,7 @@ export default {
 }
 
 .status-completed {
-  border-color: rgba(34, 197, 94, 0.35);
+  border-color: rgba(148, 163, 184, 0.22);
 }
 
 .status-failed {
