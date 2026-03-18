@@ -1,7 +1,10 @@
 <template>
   <div class="project-canvas-container">
     <!-- 项目信息节点（固定在左上角，不随画布移动） -->
-    <div class="project-info-node">
+    <div
+      ref="projectInfoNode"
+      class="project-info-node"
+    >
       <div class="project-info-main">
         <div class="project-title-switcher ui-chip-block is-title-chip">
           <button
@@ -695,7 +698,7 @@ export default {
     nodeMetrics() {
       return {
         rewrite: { width: 620, height: 420 },
-        assetExtraction: { width: 620, height: 420 },
+        assetExtraction: { width: 980, height: 620 },
         storyboard: { width: 280, height: 250 },
         media: { width: 250, headerHeight: 50, minPreviewHeight: 140 },
         multiGrid: { width: 250, headerHeight: 58, minPreviewHeight: 120, minTilesHeight: 110 },
@@ -2031,7 +2034,12 @@ export default {
     },
 
     focusCanvasNode(nodeKey) {
-      this.$refs.flowCanvas?.focusNode(nodeKey);
+      const projectInfoNode = this.$refs.projectInfoNode;
+      const projectInfoHeight = projectInfoNode
+        ? Math.ceil(projectInfoNode.getBoundingClientRect().height || projectInfoNode.offsetHeight || 0)
+        : 0;
+      const topOffset = projectInfoHeight > 0 ? projectInfoHeight + 24 : 0;
+      this.$refs.flowCanvas?.focusNode(nodeKey, { topOffset });
     },
 
     handleExecuteStage({ stageType, inputData }) {

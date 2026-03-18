@@ -118,11 +118,6 @@
               class="input input-bordered"
               required
             >
-            <label class="label">
-              <span class="label-text-alt text-base-content/60">
-                密钥将被安全存储,仅显示前8位和后4位
-              </span>
-            </label>
           </div>
 
           <!-- LLM专用参数 -->

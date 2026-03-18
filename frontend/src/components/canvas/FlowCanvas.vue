@@ -116,6 +116,9 @@ export default {
       minScale: 0.3,
       maxScale: 2,
       lastFitSignature: null,
+      isAnimatingView: false,
+      viewAnimationDuration: 320,
+      viewAnimationTimer: null,
     };
   },
   computed: {
@@ -123,6 +126,7 @@ export default {
       return {
         transform: `translate(${this.translateX}px, ${this.translateY}px) scale(${this.scale})`,
         transformOrigin: '0 0',
+        transition: this.isAnimatingView ? `transform ${this.viewAnimationDuration}ms cubic-bezier(0.22, 1, 0.36, 1)` : 'none',
       };
     }
   },
@@ -149,7 +153,39 @@ export default {
       this.lastFitSignature = this.getLayoutSignature();
     });
   },
+  beforeDestroy() {
+    this.clearViewAnimationTimer();
+  },
   methods: {
+    clearViewAnimationTimer() {
+      if (this.viewAnimationTimer) {
+        clearTimeout(this.viewAnimationTimer);
+        this.viewAnimationTimer = null;
+      }
+    },
+    stopViewAnimation() {
+      this.clearViewAnimationTimer();
+      this.isAnimatingView = false;
+    },
+    applyViewState({ scale, translateX, translateY }, { animate = false } = {}) {
+      if (animate) {
+        this.clearViewAnimationTimer();
+        this.isAnimatingView = true;
+      } else {
+        this.stopViewAnimation();
+      }
+
+      this.scale = scale;
+      this.translateX = translateX;
+      this.translateY = translateY;
+
+      if (animate) {
+        this.viewAnimationTimer = setTimeout(() => {
+          this.isAnimatingView = false;
+          this.viewAnimationTimer = null;
+        }, this.viewAnimationDuration);
+      }
+    },
     // 缩放控制
     zoomIn() {
       this.setScale(this.scale * 1.2);
@@ -158,13 +194,14 @@ export default {
       this.setScale(this.scale / 1.2);
     },
     setScale(newScale) {
+      this.stopViewAnimation();
       this.scale = Math.max(this.minScale, Math.min(this.maxScale, newScale));
     },
     resetView() {
       this.fitAllNodes();
     },
 
-    focusNode(nodeKey) {
+    focusNode(nodeKey, options = {}) {
       const wrapper = this.$refs.wrapper;
       const node = this.nodes?.[nodeKey];
 
@@ -179,17 +216,23 @@ export default {
 
       const containerWidth = container.clientWidth;
       const containerHeight = container.clientHeight;
+      const topOffset = Number(options.topOffset || 0);
+      const bottomOffset = Number(options.bottomOffset || 0);
+      const leftOffset = Number(options.leftOffset || 0);
+      const rightOffset = Number(options.rightOffset || 0);
+      const visibleWidth = containerWidth - leftOffset - rightOffset;
+      const visibleHeight = containerHeight - topOffset - bottomOffset;
 
-      if (containerWidth === 0 || containerHeight === 0) {
+      if (containerWidth === 0 || containerHeight === 0 || visibleWidth <= 0 || visibleHeight <= 0) {
         return;
       }
 
       const nodeWidth = node.width || 240;
       const nodeHeight = node.height || 160;
-      const focusPaddingX = containerWidth * 0.3;
-      const focusPaddingY = containerHeight * 0.28;
-      const focusScaleX = (containerWidth - focusPaddingX * 2) / nodeWidth;
-      const focusScaleY = (containerHeight - focusPaddingY * 2) / nodeHeight;
+      const focusPaddingX = visibleWidth * 0.3;
+      const focusPaddingY = visibleHeight * 0.28;
+      const focusScaleX = (visibleWidth - focusPaddingX * 2) / nodeWidth;
+      const focusScaleY = (visibleHeight - focusPaddingY * 2) / nodeHeight;
       const targetScale = Math.max(
         this.scale,
         Math.max(1, Math.min(focusScaleX, focusScaleY))
@@ -197,8 +240,17 @@ export default {
 
       this.scale = Math.max(this.minScale, Math.min(this.maxScale, targetScale));
 
-      this.translateX = (containerWidth / 2) - ((node.x + nodeWidth / 2) * this.scale);
-      this.translateY = (containerHeight / 2) - ((node.y + nodeHeight / 2) * this.scale);
+      const nextScale = Math.max(this.minScale, Math.min(this.maxScale, targetScale));
+      const viewportCenterX = leftOffset + (visibleWidth / 2);
+      const viewportCenterY = topOffset + (visibleHeight / 2);
+      const nextTranslateX = viewportCenterX - ((node.x + nodeWidth / 2) * nextScale);
+      const nextTranslateY = viewportCenterY - ((node.y + nodeHeight / 2) * nextScale);
+
+      this.applyViewState({
+        scale: nextScale,
+        translateX: nextTranslateX,
+        translateY: nextTranslateY,
+      }, { animate: true });
     },
 
     // 自动适配所有节点
@@ -248,15 +300,17 @@ export default {
       const scaleY = (containerHeight - padding * 2) / contentHeight;
       const targetScale = Math.min(scaleX, scaleY, 1); // 不超过1倍
 
-      // 设置缩放
-      this.scale = Math.max(this.minScale, Math.min(this.maxScale, targetScale));
+      const nextScale = Math.max(this.minScale, Math.min(this.maxScale, targetScale));
 
       // 计算平移，使内容居中
-      const scaledContentWidth = contentWidth * this.scale;
-      const scaledContentHeight = contentHeight * this.scale;
+      const scaledContentWidth = contentWidth * nextScale;
+      const scaledContentHeight = contentHeight * nextScale;
 
-      this.translateX = (containerWidth - scaledContentWidth) / 2 - minX * this.scale;
-      this.translateY = (containerHeight - scaledContentHeight) / 2 - minY * this.scale;
+      this.applyViewState({
+        scale: nextScale,
+        translateX: (containerWidth - scaledContentWidth) / 2 - minX * nextScale,
+        translateY: (containerHeight - scaledContentHeight) / 2 - minY * nextScale,
+      }, { animate: true });
     },
 
     centerView() {
@@ -264,9 +318,11 @@ export default {
       const wrapper = this.$refs.wrapper;
       if (wrapper) {
         const container = wrapper.querySelector('.canvas-container') || wrapper;
-        this.translateX = container.clientWidth / 2 - 200;
-        this.translateY = 100;
-        this.scale = 1;
+        this.applyViewState({
+          translateX: container.clientWidth / 2 - 200,
+          translateY: 100,
+          scale: 1,
+        }, { animate: true });
       }
     },
 
@@ -287,6 +343,7 @@ export default {
 
     // 鼠标拖动
     handleMouseDown(e) {
+      this.stopViewAnimation();
       // 只有在空白区域点击才开始拖动
       if (e.target.classList.contains('canvas-container') ||
           e.target.classList.contains('canvas-content')) {
@@ -322,6 +379,7 @@ export default {
 
     // 鼠标滚轮缩放
     handleWheel(e) {
+      this.stopViewAnimation();
       if (this.shouldIgnoreWheel(e.target)) {
         return;
       }

@@ -78,7 +78,7 @@
 
               <div class="card-meta compact">
                 <span class="item-group">{{ item.group || '未分组' }}</span>
-                <span class="type-chip">{{ typeText(item.variable_type) }}</span>
+                <span class="type-chip">图片资产</span>
               </div>
 
               <div class="asset-card-value">
@@ -97,30 +97,214 @@
           v-if="selectedItem"
           class="detail-panel"
         >
-          <div class="detail-card">
+          <div class="detail-card preview-stage-card">
             <div class="card-top">
               <div>
                 <div class="detail-title">
                   {{ selectedItem.label || '未命名资产' }}
                 </div>
                 <div class="detail-subtitle">
-                  点击保存后写回抽取结果
+                  右侧详情默认收起，优先展示图片预览与快捷动作
                 </div>
               </div>
               <button
-                class="pill-action ghost"
-                :disabled="isSavingItem"
-                @click.stop="handleSaveSelected"
+                class="ghost-link-btn"
+                type="button"
+                @click.stop="toggleDetailExpanded"
               >
-                <span
-                  v-if="isSavingItem"
-                  class="loading loading-spinner loading-xs"
-                />
-                <span v-else>保存当前项</span>
+                {{ detailExpanded ? '收起详情' : '展开详情' }}
               </button>
             </div>
 
-            <div class="detail-form">
+            <div class="preview-stage-shell">
+              <img
+                v-if="previewImageUrl"
+                :src="previewImageUrl"
+                alt="预览图"
+                class="preview-image"
+              >
+              <div
+                v-else
+                class="preview-placeholder"
+              >
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  class="preview-placeholder-icon"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="1.8"
+                    d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
+                  />
+                </svg>
+                <div class="preview-placeholder-title">
+                  暂无预览图
+                </div>
+                <div class="preview-placeholder-desc">
+                  点击“生图”后会使用详情中的资产值生成图片预览
+                </div>
+              </div>
+            </div>
+
+            <div class="detail-actions-row">
+              <button
+                class="pill-action"
+                :disabled="isGeneratingImage"
+                @click.stop="handleGenerateImage"
+              >
+                <span
+                  v-if="isGeneratingImage"
+                  class="loading loading-spinner loading-xs"
+                />
+                <span v-else>生图</span>
+              </button>
+              <button
+                class="pill-action ghost"
+                :disabled="isBindingAsset"
+                @click.stop="toggleAssetBrowser"
+              >
+                <span
+                  v-if="isBindingAsset"
+                  class="loading loading-spinner loading-xs"
+                />
+                <span v-else>{{ showAssetBrowser ? '收起关联资产' : '关联资产' }}</span>
+              </button>
+              <button
+                v-if="previewImageUrl"
+                class="pill-action accent-action"
+                :disabled="isConfirmingImage"
+                @click.stop="handleConfirmImage"
+              >
+                <span
+                  v-if="isConfirmingImage"
+                  class="loading loading-spinner loading-xs"
+                />
+                <span v-else>满意后保存</span>
+              </button>
+            </div>
+
+            <div class="preview-caption">
+              当前生图使用“资产值”作为提示文本；满意后再创建图片资产并绑定。
+            </div>
+          </div>
+
+          <div
+            v-if="showAssetBrowser"
+            class="detail-card"
+          >
+            <div class="card-top">
+              <div>
+                <div class="detail-title">
+                  关联资产
+                </div>
+                <div class="detail-subtitle">
+                  直接点击卡片完成关联，比下拉框更直观
+                </div>
+              </div>
+              <button
+                v-if="selectedItem.selected_asset_id"
+                class="ghost-link-btn"
+                type="button"
+                @click.stop="clearAssetSelection"
+              >
+                清除选择
+              </button>
+            </div>
+
+            <label class="field-block search-block">
+              <span class="field-label">搜索资产</span>
+              <input
+                v-model="assetSearchKeyword"
+                class="input input-bordered input-sm"
+                type="text"
+                placeholder="搜索资产键、分组或描述"
+              >
+            </label>
+
+            <div
+              v-if="selectedAssetSummary"
+              class="selected-asset-banner"
+            >
+              <span class="meta-chip accent">当前已关联</span>
+              <span class="selected-asset-title">{{ selectedAssetSummary.key }}</span>
+              <span
+                v-if="selectedAssetSummary.group"
+                class="selected-asset-group"
+              >{{ selectedAssetSummary.group }}</span>
+            </div>
+
+            <div
+              v-if="filteredAssetOptions.length"
+              class="asset-option-grid"
+            >
+              <button
+                v-for="asset in filteredAssetOptions"
+                :key="assetIdentity(asset)"
+                class="asset-option-card"
+                :class="{ active: isAssetSelected(asset) }"
+                type="button"
+                @click.stop="handleBindAsset(asset)"
+              >
+                <div class="asset-option-media">
+                  <img
+                    v-if="asset.image_url"
+                    :src="asset.image_url"
+                    :alt="asset.key || 'asset'"
+                    class="asset-option-thumb"
+                  >
+                  <div
+                    v-else
+                    class="asset-option-fallback"
+                  >
+                    {{ (asset.key || '资产').slice(0, 2).toUpperCase() }}
+                  </div>
+                </div>
+
+                <div class="asset-option-main">
+                  <div class="asset-option-title-row">
+                    <span class="asset-option-title">{{ asset.key || '未命名资产' }}</span>
+                    <span class="asset-option-status">{{ isAssetSelected(asset) ? '已关联' : '点击关联' }}</span>
+                  </div>
+                  <div class="asset-option-meta">
+                    {{ asset.group || '未分组' }} · {{ asset.variable_type_display || typeText(asset.variable_type) }}
+                  </div>
+                  <div class="asset-option-desc">
+                    {{ asset.description || shortValue(asset.value || asset.typed_value) || '暂无说明' }}
+                  </div>
+                </div>
+              </button>
+            </div>
+            <div
+              v-else
+              class="empty-inline"
+            >
+              没有匹配的资产，可尝试调整搜索关键词
+            </div>
+          </div>
+
+          <div class="detail-card detail-editor-card">
+            <button
+              class="detail-toggle"
+              type="button"
+              @click.stop="toggleDetailExpanded"
+            >
+              <span>资产详情</span>
+              <span class="detail-toggle-text">{{ detailExpanded ? '收起' : '展开' }}</span>
+            </button>
+
+            <div
+              v-if="detailExpanded"
+              class="detail-form"
+            >
+              <div class="card-meta compact helper-meta">
+                <span class="meta-chip">图片资产</span>
+                <span class="field-hint">资产值字段会直接作为文生图提示文本使用</span>
+              </div>
+
               <label class="field-block">
                 <span class="field-label">资产键</span>
                 <input
@@ -160,7 +344,7 @@
                       {{ showAdvancedType ? '收起高级设置' : '高级设置' }}
                     </button>
                   </div>
-                  <span class="field-hint">默认按图片资产处理，文本内容将作为文生图提示信息使用</span>
+                  <span class="field-hint">默认按图片资产处理，只有特殊情况才切换其他类型</span>
                 </div>
               </div>
 
@@ -186,6 +370,7 @@
                 <textarea
                   v-model="editableValue"
                   class="textarea textarea-bordered value-textarea"
+                  placeholder="请输入用于描述图片内容、风格、构图的文本"
                   @change="handleValueChange"
                 />
               </label>
@@ -197,126 +382,18 @@
                   class="textarea textarea-bordered textarea-sm detail-textarea"
                 />
               </label>
-            </div>
-          </div>
 
-          <div class="detail-card">
-            <div class="card-top">
-              <div>
-                <div class="detail-title">
-                  关联资产
-                </div>
-                <div class="detail-subtitle">
-                  可绑定已有资产，或作为待应用动作
-                </div>
-              </div>
-            </div>
-
-            <div class="detail-form">
-              <div class="field-row">
-                <label class="field-block">
-                  <span class="field-label">动作</span>
-                  <select
-                    v-model="selectedItem.selected_action"
-                    class="select select-bordered select-sm"
-                  >
-                    <option value="">请选择动作</option>
-                    <option value="bind_existing">关联已有</option>
-                    <option value="create_new">生成新资产</option>
-                    <option value="overwrite_existing">覆盖已有</option>
-                    <option value="skip">跳过</option>
-                  </select>
-                </label>
-                <label class="field-block">
-                  <span class="field-label">已有关联</span>
-                  <select
-                    v-model="selectedItem.selected_asset_id"
-                    class="select select-bordered select-sm"
-                    :disabled="!requiresAssetSelection(selectedItem.selected_action)"
-                  >
-                    <option value="">请选择资产</option>
-                    <option
-                      v-for="asset in resolveAssetOptions(selectedItem)"
-                      :key="asset.id || asset.asset_id"
-                      :value="asset.id || asset.asset_id"
-                    >
-                      {{ (asset.key || '未命名') + (asset.group ? ` · ${asset.group}` : '') }}
-                    </option>
-                  </select>
-                </label>
-              </div>
-            </div>
-          </div>
-
-          <div class="detail-card">
-            <div class="card-top">
-              <div>
-                <div class="detail-title">
-                  文生图
-                </div>
-                <div class="detail-subtitle">
-                  先生成预览，满意后再保存为图片资产
-                </div>
-              </div>
               <button
-                class="pill-action"
-                :disabled="isGeneratingImage"
-                @click.stop="handleGenerateImage"
+                class="pill-action secondary"
+                :disabled="isSavingItem"
+                @click.stop="handleSaveSelected"
               >
                 <span
-                  v-if="isGeneratingImage"
+                  v-if="isSavingItem"
                   class="loading loading-spinner loading-xs"
                 />
-                <span v-else>生成预览</span>
+                <span v-else>保存当前项</span>
               </button>
-            </div>
-
-            <div class="detail-form">
-              <label class="field-block">
-                <span class="field-label">生成提示词</span>
-                <textarea
-                  v-model="selectedItem.generation_prompt"
-                  class="textarea textarea-bordered prompt-textarea"
-                  placeholder="请输入用于文生图的提示词"
-                />
-              </label>
-
-              <div
-                v-if="previewImageUrl"
-                class="preview-card"
-              >
-                <img
-                  :src="previewImageUrl"
-                  alt="预览图"
-                  class="preview-image"
-                >
-                <div class="card-meta compact preview-meta">
-                  <span class="meta-chip">预览完成</span>
-                  <span
-                    v-if="selectedItem.generated_image_preview && selectedItem.generated_image_preview.provider && selectedItem.generated_image_preview.provider.name"
-                    class="meta-chip"
-                  >
-                    {{ selectedItem.generated_image_preview.provider.name }}
-                  </span>
-                </div>
-                <button
-                  class="pill-action secondary"
-                  :disabled="isConfirmingImage"
-                  @click.stop="handleConfirmImage"
-                >
-                  <span
-                    v-if="isConfirmingImage"
-                    class="loading loading-spinner loading-xs"
-                  />
-                  <span v-else>满意，保存为图片资产并绑定</span>
-                </button>
-              </div>
-              <div
-                v-else
-                class="empty-inline"
-              >
-                生成完成后会在这里显示预览图
-              </div>
             </div>
           </div>
         </div>
@@ -333,20 +410,6 @@
           执行后会解析文案并给出可关联、可编辑、可文生图的资产项
         </div>
       </div>
-    </div>
-
-    <div class="card-footer">
-      <button
-        class="pill-action secondary"
-        :disabled="isApplying || !canApply"
-        @click.stop="handleApply"
-      >
-        <span
-          v-if="isApplying"
-          class="loading loading-spinner loading-xs"
-        />
-        <span v-else>应用全部选择</span>
-      </button>
     </div>
   </div>
 </template>
@@ -381,14 +444,17 @@ export default {
   data() {
     return {
       isExecuting: false,
-      isApplying: false,
       isSavingItem: false,
       isGeneratingImage: false,
       isConfirmingImage: false,
+      isBindingAsset: false,
       localItems: [],
       selectedTempId: '',
       editableValue: '',
       showAdvancedType: false,
+      detailExpanded: false,
+      showAssetBrowser: false,
+      assetSearchKeyword: '',
     };
   },
   computed: {
@@ -400,7 +466,7 @@ export default {
       };
     },
     effectiveStatus() {
-      if (this.isExecuting || this.isApplying || this.isSavingItem || this.isGeneratingImage || this.isConfirmingImage) {
+      if (this.isExecuting || this.isSavingItem || this.isGeneratingImage || this.isConfirmingImage || this.isBindingAsset) {
         return 'processing';
       }
       return this.status;
@@ -416,14 +482,35 @@ export default {
     itemCount() {
       return this.localItems.length;
     },
-    canApply() {
-      return this.localItems.some(item => item.selected_action);
-    },
     selectedItem() {
       return this.localItems.find(item => item.temp_id === this.selectedTempId) || null;
     },
     previewImageUrl() {
       return (this.selectedItem && this.selectedItem.generated_image_preview && this.selectedItem.generated_image_preview.url) || '';
+    },
+    filteredAssetOptions() {
+      const item = this.selectedItem;
+      if (!item) {
+        return [];
+      }
+      const keyword = (this.assetSearchKeyword || '').trim().toLowerCase();
+      return this.resolveAssetOptions(item).filter((asset) => {
+        if (!keyword) {
+          return true;
+        }
+        const text = [asset.key, asset.group, asset.description, asset.value]
+          .filter(Boolean)
+          .join(' ')
+          .toLowerCase();
+        return text.includes(keyword);
+      });
+    },
+    selectedAssetSummary() {
+      const item = this.selectedItem;
+      if (!item || !item.selected_asset_id) {
+        return null;
+      }
+      return this.resolveAssetOptions(item).find(asset => this.assetIdentity(asset) === item.selected_asset_id) || null;
     },
   },
   watch: {
@@ -445,6 +532,9 @@ export default {
     },
     selectedTempId() {
       this.showAdvancedType = false;
+      this.detailExpanded = false;
+      this.showAssetBrowser = false;
+      this.assetSearchKeyword = '';
       this.syncEditableValue();
     },
     selectedItem: {
@@ -507,6 +597,12 @@ export default {
     toggleAdvancedType() {
       this.showAdvancedType = !this.showAdvancedType;
     },
+    toggleDetailExpanded() {
+      this.detailExpanded = !this.detailExpanded;
+    },
+    toggleAssetBrowser() {
+      this.showAssetBrowser = !this.showAssetBrowser;
+    },
     parseEditableValue(raw, variableType) {
       if (variableType === 'json') {
         return raw ? JSON.parse(raw) : {};
@@ -542,19 +638,32 @@ export default {
     selectItem(tempId) {
       this.selectedTempId = tempId;
     },
-    requiresAssetSelection(action) {
-      return action === 'bind_existing' || action === 'overwrite_existing';
+    assetIdentity(asset) {
+      return asset.id || asset.asset_id || '';
+    },
+    isAssetSelected(asset) {
+      return this.selectedItem && this.selectedItem.selected_asset_id === this.assetIdentity(asset);
+    },
+    clearAssetSelection() {
+      if (!this.selectedItem) {
+        return;
+      }
+      this.selectedItem.selected_asset_id = '';
+      this.$message?.info('已清除当前选择，若需生效请重新关联其他资产');
     },
     resolveAssetOptions(item) {
       const candidateMap = new Map();
-      (item.candidates || []).forEach(candidate => {
+      (item.candidates || []).forEach((candidate) => {
         candidateMap.set(candidate.asset_id, {
           id: candidate.asset_id,
           key: candidate.key,
           group: candidate.group,
+          description: candidate.description,
+          variable_type: candidate.variable_type,
+          variable_type_display: this.typeText(candidate.variable_type),
         });
       });
-      this.availableAssets.forEach(asset => {
+      this.availableAssets.forEach((asset) => {
         candidateMap.set(asset.id, asset);
       });
       return Array.from(candidateMap.values());
@@ -590,8 +699,7 @@ export default {
           variable_type: this.selectedItem.variable_type || 'image',
           value: this.selectedItem.value,
           description: this.selectedItem.description,
-          generation_prompt: this.selectedItem.generation_prompt,
-          selected_action: this.selectedItem.selected_action,
+          generation_prompt: this.selectedItem.value,
           selected_asset_id: this.selectedItem.selected_asset_id,
         });
         this.applyStagePayload(response.stage);
@@ -607,9 +715,10 @@ export default {
       if (!this.selectedItem) {
         return;
       }
-      const prompt = (this.selectedItem.generation_prompt || this.selectedItem.value || '').trim();
+      this.handleValueChange();
+      const prompt = String(this.selectedItem.value || '').trim();
       if (!prompt) {
-        this.$message?.warning('请先输入文生图提示词');
+        this.$message?.warning('请先填写详情中的资产值');
         return;
       }
       this.isGeneratingImage = true;
@@ -632,6 +741,7 @@ export default {
         this.$message?.warning('请先生成预览图');
         return;
       }
+      this.handleValueChange();
       this.isConfirmingImage = true;
       try {
         const response = await projectsAPI.confirmAssetExtractionImage(this.projectId, {
@@ -639,7 +749,7 @@ export default {
           key: this.selectedItem.key,
           group: this.selectedItem.group,
           description: this.selectedItem.description,
-          value: this.selectedItem.generation_prompt || this.selectedItem.value || '',
+          value: this.selectedItem.value || '',
         });
         this.applyStagePayload(response.stage);
         this.$message?.success('图片资产已创建并绑定');
@@ -651,59 +761,29 @@ export default {
         this.isConfirmingImage = false;
       }
     },
-    buildApplyPayload(item) {
-      const payload = {
-        temp_id: item.temp_id,
-        action: item.selected_action,
-      };
-
-      if (this.requiresAssetSelection(item.selected_action)) {
-        payload.asset_id = item.selected_asset_id;
-      }
-
-      if (item.selected_action === 'create_new') {
-        payload.asset = {
-          key: item.key,
-          group: item.group,
-          variable_type: item.variable_type || 'image',
-          value: item.value,
-          description: item.description || `从资产抽取节点生成：${item.label || item.key}`,
-        };
-      }
-
-      if (item.selected_action === 'overwrite_existing') {
-        payload.asset = {
-          key: item.key,
-          group: item.group,
-          variable_type: item.variable_type || 'image',
-          value: item.value,
-          description: item.description || `从资产抽取节点更新：${item.label || item.key}`,
-        };
-      }
-
-      return payload;
-    },
-    async handleApply() {
-      const payload = this.localItems
-        .filter(item => item.selected_action)
-        .map(item => this.buildApplyPayload(item));
-
-      if (!payload.length) {
-        this.$message?.warning('请先选择要应用的资产项');
+    async handleBindAsset(asset) {
+      if (!this.selectedItem) {
         return;
       }
-
-      this.isApplying = true;
+      const assetId = this.assetIdentity(asset);
+      if (!assetId) {
+        return;
+      }
+      this.isBindingAsset = true;
       try {
-        const response = await projectsAPI.applyAssetExtraction(this.projectId, payload);
+        const response = await projectsAPI.applyAssetExtraction(this.projectId, [{
+          temp_id: this.selectedItem.temp_id,
+          action: 'bind_existing',
+          asset_id: assetId,
+        }]);
         this.applyStagePayload(response.stage);
-        this.$message?.success('资产已更新并绑定到项目');
+        this.$message?.success('资产关联成功');
         this.$emit('asset-bindings-updated');
       } catch (error) {
-        console.error('[AssetExtractionNode] 应用资产失败:', error);
-        this.$message?.error(error.response?.data?.error || error.message || '应用资产失败');
+        console.error('[AssetExtractionNode] 关联已有资产失败:', error);
+        this.$message?.error(error.response?.data?.error || error.message || '关联资产失败');
       } finally {
-        this.isApplying = false;
+        this.isBindingAsset = false;
       }
     },
   }
@@ -741,14 +821,16 @@ export default {
   border-color: rgba(56, 189, 248, 0.22);
 }
 
-.node-top,
-.card-footer {
+.node-top {
   padding: 16px 18px;
 }
 
 .card-top,
 .card-meta,
-.card-footer {
+.card-footer,
+.detail-actions-row,
+.type-summary-row,
+.detail-toggle {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -778,14 +860,23 @@ export default {
 .asset-card-key,
 .asset-card-value,
 .ghost-link,
-.empty-inline {
+.empty-inline,
+.preview-caption,
+.preview-placeholder-desc,
+.asset-option-meta,
+.asset-option-desc,
+.field-hint,
+.detail-toggle-text {
   color: #64748b;
 }
 
 .layout-shell.theme-dark .card-title,
 .layout-shell.theme-dark .empty-title,
 .layout-shell.theme-dark .detail-title,
-.layout-shell.theme-dark .asset-card-title {
+.layout-shell.theme-dark .asset-card-title,
+.layout-shell.theme-dark .preview-placeholder-title,
+.layout-shell.theme-dark .asset-option-title,
+.layout-shell.theme-dark .selected-asset-title {
   color: #e2e8f0;
 }
 
@@ -797,7 +888,15 @@ export default {
 .layout-shell.theme-dark .asset-card-key,
 .layout-shell.theme-dark .asset-card-value,
 .layout-shell.theme-dark .ghost-link,
-.layout-shell.theme-dark .empty-inline {
+.layout-shell.theme-dark .empty-inline,
+.layout-shell.theme-dark .preview-caption,
+.layout-shell.theme-dark .preview-placeholder-desc,
+.layout-shell.theme-dark .asset-option-meta,
+.layout-shell.theme-dark .asset-option-desc,
+.layout-shell.theme-dark .field-hint,
+.layout-shell.theme-dark .detail-toggle-text,
+.layout-shell.theme-dark .ghost-link-btn,
+.layout-shell.theme-dark .selected-asset-group {
   color: #94a3b8;
 }
 
@@ -826,6 +925,12 @@ export default {
   background: rgba(248, 250, 252, 0.88);
 }
 
+.pill-action.accent-action {
+  background: rgba(14, 165, 233, 0.12);
+  color: #0369a1;
+  border-color: rgba(56, 189, 248, 0.34);
+}
+
 .pill-action:disabled {
   opacity: 0.55;
   cursor: not-allowed;
@@ -834,6 +939,25 @@ export default {
 .layout-shell.theme-dark .pill-action {
   background: rgba(30, 41, 59, 0.92);
   color: #e2e8f0;
+}
+
+.layout-shell.theme-dark .pill-action.accent-action {
+  background: rgba(8, 145, 178, 0.18);
+  color: #67e8f9;
+}
+
+.ghost-link-btn {
+  border: none;
+  background: transparent;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0;
+}
+
+.ghost-link-btn:hover {
+  color: #0891b2;
 }
 
 .card-meta {
@@ -850,7 +974,8 @@ export default {
 .meta-chip,
 .item-group,
 .type-chip,
-.status-chip {
+.status-chip,
+.type-pill {
   display: inline-flex;
   align-items: center;
   border-radius: 999px;
@@ -860,7 +985,9 @@ export default {
 }
 
 .meta-chip.accent,
-.asset-grid-card.active .status-chip {
+.asset-grid-card.active .status-chip,
+.selected-asset-banner .meta-chip,
+.type-pill {
   background: rgba(34, 211, 238, 0.14);
   color: #0891b2;
 }
@@ -876,7 +1003,9 @@ export default {
 .empty-state,
 .detail-card,
 .asset-grid-card,
-.preview-card {
+.preview-stage-shell,
+.asset-option-card,
+.selected-asset-banner {
   border-radius: 18px;
   border: 1px solid rgba(148, 163, 184, 0.18);
   background: rgba(248, 250, 252, 0.76);
@@ -886,7 +1015,9 @@ export default {
 .layout-shell.theme-dark .empty-state,
 .layout-shell.theme-dark .detail-card,
 .layout-shell.theme-dark .asset-grid-card,
-.layout-shell.theme-dark .preview-card {
+.layout-shell.theme-dark .preview-stage-shell,
+.layout-shell.theme-dark .asset-option-card,
+.layout-shell.theme-dark .selected-asset-banner {
   background: rgba(15, 23, 42, 0.72);
   border-color: rgba(148, 163, 184, 0.18);
 }
@@ -928,7 +1059,8 @@ export default {
   border-color: rgba(34, 211, 238, 0.32);
 }
 
-.asset-grid-card.matched {
+.asset-grid-card.matched,
+.detail-card {
   position: relative;
 }
 
@@ -971,10 +1103,81 @@ export default {
   padding: 14px 16px 16px;
 }
 
+.preview-stage-shell {
+  min-height: 244px;
+  overflow: hidden;
+}
+
+.preview-image {
+  width: 100%;
+  height: 244px;
+  object-fit: contain;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.9);
+}
+
+.preview-placeholder {
+  height: 244px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 20px;
+}
+
+.preview-placeholder-icon {
+  width: 52px;
+  height: 52px;
+  margin-bottom: 12px;
+  color: rgba(100, 116, 139, 0.7);
+}
+
+.preview-placeholder-title,
+.asset-option-title,
+.selected-asset-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.preview-placeholder-desc {
+  font-size: 12px;
+  line-height: 1.6;
+  max-width: 250px;
+}
+
+.detail-actions-row {
+  margin-top: 14px;
+  flex-wrap: wrap;
+}
+
+.preview-caption {
+  margin-top: 10px;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.detail-toggle {
+  width: 100%;
+  border: none;
+  background: transparent;
+  padding: 0;
+  font-size: 14px;
+  font-weight: 700;
+  color: #0f172a;
+  cursor: pointer;
+}
+
+.layout-shell.theme-dark .detail-toggle {
+  color: #e2e8f0;
+}
+
 .detail-form {
   display: flex;
   flex-direction: column;
   gap: 12px;
+  margin-top: 14px;
 }
 
 .field-row {
@@ -995,83 +1198,118 @@ export default {
   color: #475569;
 }
 
-.field-hint {
-  font-size: 12px;
-  color: #64748b;
-  line-height: 1.5;
-}
-
-.type-block {
-  justify-content: flex-start;
-}
-
-.type-summary-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-}
-
-.type-pill {
-  display: inline-flex;
-  align-items: center;
-  border-radius: 999px;
-  padding: 6px 12px;
-  background: rgba(34, 211, 238, 0.12);
-  color: #0891b2;
-  font-size: 12px;
-  font-weight: 600;
-}
-
-.ghost-link-btn {
-  border: none;
-  background: transparent;
-  color: #64748b;
-  font-size: 12px;
-  font-weight: 600;
-  cursor: pointer;
-  padding: 0;
-}
-
-.ghost-link-btn:hover {
-  color: #0891b2;
-}
-
 .layout-shell.theme-dark .field-label {
   color: #cbd5e1;
 }
 
-.layout-shell.theme-dark .field-hint,
-.layout-shell.theme-dark .ghost-link-btn {
-  color: #94a3b8;
-}
-
-.layout-shell.theme-dark .type-pill {
-  background: rgba(34, 211, 238, 0.16);
-  color: #67e8f9;
-}
-
 .value-textarea,
-.detail-textarea,
-.prompt-textarea {
+.detail-textarea {
   width: 100%;
   min-height: 88px;
 }
 
-.preview-card {
-  padding: 12px;
+.search-block {
+  margin-top: 12px;
 }
 
-.preview-image {
+.selected-asset-banner {
+  margin-top: 12px;
+  padding: 10px 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.selected-asset-group {
+  font-size: 12px;
+  color: #64748b;
+}
+
+.asset-option-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 10px;
+  margin-top: 12px;
+  max-height: 300px;
+  overflow: auto;
+}
+
+.asset-option-card {
   width: 100%;
-  max-height: 220px;
-  object-fit: contain;
+  display: grid;
+  grid-template-columns: 64px minmax(0, 1fr);
+  gap: 12px;
+  padding: 12px;
+  text-align: left;
+  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+}
+
+.asset-option-card:hover,
+.asset-option-card.active {
+  border-color: rgba(34, 211, 238, 0.36);
+  box-shadow: 0 12px 24px rgba(15, 23, 42, 0.1);
+  transform: translateY(-2px);
+}
+
+.asset-option-media {
+  width: 64px;
+  height: 64px;
+}
+
+.asset-option-thumb,
+.asset-option-fallback {
+  width: 64px;
+  height: 64px;
   border-radius: 14px;
+}
+
+.asset-option-thumb {
+  object-fit: cover;
   background: rgba(255, 255, 255, 0.9);
 }
 
-.preview-meta {
-  margin: 10px 0 12px;
+.asset-option-fallback {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(148, 163, 184, 0.12);
+  color: #475569;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.layout-shell.theme-dark .asset-option-fallback {
+  color: #cbd5e1;
+}
+
+.asset-option-main {
+  min-width: 0;
+}
+
+.asset-option-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.asset-option-status {
+  font-size: 12px;
+  color: #0891b2;
+  white-space: nowrap;
+}
+
+.asset-option-meta,
+.asset-option-desc {
+  margin-top: 4px;
+  font-size: 12px;
+  line-height: 1.5;
+  word-break: break-word;
+}
+
+.helper-meta {
+  align-items: flex-start;
 }
 
 .empty-inline {
@@ -1080,6 +1318,7 @@ export default {
   padding: 18px 14px;
   text-align: center;
   font-size: 13px;
+  margin-top: 12px;
 }
 
 .empty-state {
