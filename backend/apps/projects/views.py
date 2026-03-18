@@ -7,17 +7,20 @@
 
 import json
 import uuid
+from pathlib import Path
 
 from celery.result import AsyncResult
 from django.core.cache import cache
 from django.conf import settings
 from django.contrib.auth import get_user_model
+from django.core.files.base import ContentFile
 from django.db.models import Q
 from django.http import StreamingHttpResponse
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from django_filters.rest_framework import DjangoFilterBackend
 from jinja2 import Template, TemplateError
+import requests
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.filters import OrderingFilter, SearchFilter
@@ -30,6 +33,7 @@ from apps.prompts.models import PromptTemplate, PromptTemplateSet
 from apps.prompts.models import GlobalVariable
 from apps.prompts.serializers import GlobalVariableListSerializer
 from core.ai_client.factory import create_ai_client
+from core.utils.file_storage import image_storage
 from .models import Project, ProjectAssetBinding, ProjectModelConfig, ProjectStage, Series
 from .queue_service import cancel_running_queue_task, enqueue_episode_task, force_release_queue_task
 from .serializers import (
@@ -171,6 +175,59 @@ class ProjectViewSet(viewsets.ModelViewSet):
 
     def _ensure_project_asset_binding(self, project, asset):
         ProjectAssetBinding.objects.get_or_create(project=project, asset=asset)
+
+    def _get_project_image_provider(self, project):
+        config = getattr(project, 'model_config', None)
+        if config:
+            providers = list(config.image_providers.all())
+            if providers:
+                return providers[0]
+
+        template_set = getattr(project, 'prompt_template_set', None)
+        if not template_set:
+            template_set = PromptTemplateSet.objects.filter(is_default=True).first()
+
+        if template_set:
+            template = PromptTemplate.objects.select_related('model_provider').filter(
+                template_set=template_set,
+                stage_type='image_generation',
+                is_active=True,
+            ).first()
+            if template and template.model_provider:
+                return template.model_provider
+
+        return ModelProvider.objects.filter(provider_type='text2image', is_active=True).first()
+
+    def _build_image_asset_file(self, image_url):
+        if not image_url:
+            raise ValueError('缺少图片地址')
+
+        if image_url.startswith('/api/v1/content/storage/image/'):
+            relative_path = image_url.split('/api/v1/content/storage/image/', 1)[1]
+            file_path = image_storage.base_dir / relative_path
+            if not file_path.exists():
+                raise ValueError('预览图片不存在，无法保存为资产')
+            return ContentFile(file_path.read_bytes(), name=Path(relative_path).name)
+
+        response = requests.get(image_url, timeout=30)
+        response.raise_for_status()
+        filename = Path(image_url.split('?', 1)[0]).name or f'{uuid.uuid4().hex}.png'
+        return ContentFile(response.content, name=filename)
+
+    def _extract_asset_item(self, stage, temp_id):
+        output_data = stage.output_data or {}
+        items = output_data.get('items') or []
+        for index, item in enumerate(items):
+            if item.get('temp_id') == temp_id:
+                return output_data, items, index, dict(item)
+        return output_data, items, -1, None
+
+    def _persist_asset_item(self, stage, output_data, items, item_index, item):
+        items[item_index] = item
+        output_data['items'] = items
+        output_data['updated_at'] = timezone.now().isoformat()
+        stage.output_data = output_data
+        stage.save(update_fields=['output_data'])
 
     def _serialize_asset_binding_results(self, project):
         bindings = project.asset_bindings.select_related('asset').all()
@@ -1252,6 +1309,171 @@ class ProjectViewSet(viewsets.ModelViewSet):
         return Response({
             'message': '资产抽取结果已应用',
             'results': results,
+            'stage': ProjectStageSerializer(stage).data,
+            'bindings': self._serialize_asset_binding_results(project),
+        })
+
+    @action(detail=True, methods=['patch'])
+    def asset_extraction_item(self, request, pk=None):
+        project = self.get_object()
+        stage = get_object_or_404(ProjectStage, project=project, stage_type='asset_extraction')
+        temp_id = request.data.get('temp_id')
+
+        if not temp_id:
+            return Response({'error': '缺少 temp_id'}, status=status.HTTP_400_BAD_REQUEST)
+
+        output_data, items, item_index, item = self._extract_asset_item(stage, temp_id)
+        if item is None:
+            return Response({'error': '未找到对应的抽取项'}, status=status.HTTP_404_NOT_FOUND)
+
+        editable_fields = [
+            'key', 'label', 'group', 'variable_type', 'value', 'description', 'generation_prompt',
+            'selected_action', 'selected_asset_id',
+        ]
+        for field in editable_fields:
+            if field in request.data:
+                item[field] = request.data.get(field)
+
+        self._persist_asset_item(stage, output_data, items, item_index, item)
+
+        return Response({
+            'message': '抽取项已更新',
+            'item': item,
+            'stage': ProjectStageSerializer(stage).data,
+        })
+
+    @action(detail=True, methods=['post'])
+    def asset_extraction_generate_image(self, request, pk=None):
+        project = self.get_object()
+        stage = get_object_or_404(ProjectStage, project=project, stage_type='asset_extraction')
+        temp_id = request.data.get('temp_id')
+        prompt = (request.data.get('prompt') or '').strip()
+
+        if not temp_id:
+            return Response({'error': '缺少 temp_id'}, status=status.HTTP_400_BAD_REQUEST)
+        if not prompt:
+            return Response({'error': '缺少生成提示词'}, status=status.HTTP_400_BAD_REQUEST)
+
+        output_data, items, item_index, item = self._extract_asset_item(stage, temp_id)
+        if item is None:
+            return Response({'error': '未找到对应的抽取项'}, status=status.HTTP_404_NOT_FOUND)
+
+        provider = self._get_project_image_provider(project)
+        if not provider:
+            return Response({'error': '未配置可用的文生图模型'}, status=status.HTTP_400_BAD_REQUEST)
+
+        client = create_ai_client(provider)
+        width = int(provider.extra_config.get('width', 1024)) if provider.extra_config else 1024
+        height = int(provider.extra_config.get('height', 1024)) if provider.extra_config else 1024
+
+        response = client.generate(
+            api_url=provider.api_url,
+            session_id=provider.api_key,
+            model=provider.model_name,
+            prompt=prompt,
+            ratio='1:1',
+            resolution='2k',
+            width=width,
+            height=height,
+        )
+
+        images = response.data if hasattr(response, 'data') else None
+        if isinstance(images, dict):
+            images = [images]
+        if not response or not getattr(response, 'success', False) or not isinstance(images, list) or not images:
+            return Response(
+                {'error': getattr(response, 'error', None) or '文生图生成失败'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        preview = dict(images[0])
+        preview['prompt'] = prompt
+        preview['provider'] = {
+            'id': str(provider.id),
+            'name': provider.name,
+            'model_name': provider.model_name,
+        }
+        preview['created_at'] = timezone.now().isoformat()
+
+        item['generated_image_preview'] = preview
+        item['generation_prompt'] = prompt
+        self._persist_asset_item(stage, output_data, items, item_index, item)
+
+        return Response({
+            'message': '图片预览已生成',
+            'preview': preview,
+            'item': item,
+            'stage': ProjectStageSerializer(stage).data,
+        })
+
+    @action(detail=True, methods=['post'])
+    def asset_extraction_confirm_image(self, request, pk=None):
+        project = self.get_object()
+        stage = get_object_or_404(ProjectStage, project=project, stage_type='asset_extraction')
+        temp_id = request.data.get('temp_id')
+
+        if not temp_id:
+            return Response({'error': '缺少 temp_id'}, status=status.HTTP_400_BAD_REQUEST)
+
+        output_data, items, item_index, item = self._extract_asset_item(stage, temp_id)
+        if item is None:
+            return Response({'error': '未找到对应的抽取项'}, status=status.HTTP_404_NOT_FOUND)
+
+        preview = item.get('generated_image_preview') or {}
+        preview_url = preview.get('url')
+        if not preview_url:
+            return Response({'error': '当前抽取项没有可确认的图片预览'}, status=status.HTTP_400_BAD_REQUEST)
+
+        asset_key = (request.data.get('key') or item.get('key') or '').strip()
+        if not asset_key:
+            return Response({'error': '资产键不能为空'}, status=status.HTTP_400_BAD_REQUEST)
+
+        existing_asset = GlobalVariable.objects.filter(
+            key=asset_key,
+            created_by=request.user,
+            scope='user',
+        ).first()
+        if existing_asset:
+            return Response({'error': f'资产键 {asset_key} 已存在，请先修改资产键'}, status=status.HTTP_400_BAD_REQUEST)
+
+        image_file = self._build_image_asset_file(preview_url)
+        asset = GlobalVariable(
+            key=asset_key,
+            value=(request.data.get('value') or item.get('generation_prompt') or item.get('value') or '').strip(),
+            variable_type='image',
+            scope='user',
+            group=(request.data.get('group') or item.get('group') or '图片资产').strip(),
+            description=(request.data.get('description') or item.get('description') or f'从资产抽取节点确认生成：{item.get("label") or asset_key}').strip(),
+            created_by=request.user,
+            is_active=True,
+        )
+        asset.image_file.save(image_file.name, image_file, save=False)
+        asset.save()
+
+        self._ensure_project_asset_binding(project, asset)
+
+        candidates = item.get('candidates') or []
+        candidates.insert(0, {
+            'asset_id': str(asset.id),
+            'key': asset.key,
+            'group': asset.group,
+            'description': asset.description,
+            'variable_type': asset.variable_type,
+            'scope': asset.scope,
+            'scope_display': asset.get_scope_display(),
+        })
+        item['candidates'] = candidates[:4]
+        item['selected_asset_id'] = str(asset.id)
+        item['selected_action'] = 'bind_existing'
+        item['variable_type'] = 'image'
+        item['match_status'] = 'matched'
+        item['confirmed_image_asset'] = self._serialize_asset_choice(asset)
+        self._persist_asset_item(stage, output_data, items, item_index, item)
+
+        return Response({
+            'message': '图片资产已创建并绑定',
+            'asset': GlobalVariableListSerializer(asset, context=self.get_serializer_context()).data,
+            'item': item,
             'stage': ProjectStageSerializer(stage).data,
             'bindings': self._serialize_asset_binding_results(project),
         })

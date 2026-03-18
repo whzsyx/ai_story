@@ -182,6 +182,13 @@
                 v-else
                 class="muted"
               >未上传</span>
+              <div
+                v-if="asset.value"
+                class="value-text image-text"
+                :title="String(asset.value)"
+              >
+                {{ formatValue(asset) }}
+              </div>
             </div>
             <div
               v-else

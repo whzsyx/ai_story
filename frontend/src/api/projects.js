@@ -52,6 +52,18 @@ export default {
     });
   },
 
+  updateAssetExtractionItem(projectId, data = {}) {
+    return apiClient.patch(`/projects/projects/${projectId}/asset_extraction_item/`, data);
+  },
+
+  generateAssetExtractionImage(projectId, data = {}) {
+    return apiClient.post(`/projects/projects/${projectId}/asset_extraction_generate_image/`, data);
+  },
+
+  confirmAssetExtractionImage(projectId, data = {}) {
+    return apiClient.post(`/projects/projects/${projectId}/asset_extraction_confirm_image/`, data);
+  },
+
   getAssetExtractionAssets(projectId) {
     return apiClient.get(`/projects/projects/${projectId}/asset_extraction_assets/`);
   },

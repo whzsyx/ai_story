@@ -4159,6 +4159,15 @@ html:has(.drawer-toggle:checked) {
   line-height: 1.625;
 }
 
+.textarea-sm {
+  padding-left: 0.75rem;
+  padding-right: 0.75rem;
+  padding-top: 0.25rem;
+  padding-bottom: 0.25rem;
+  font-size: 0.875rem;
+  line-height: 2rem;
+}
+
 .textarea-lg {
   padding-left: 1.5rem;
   padding-right: 1.5rem;

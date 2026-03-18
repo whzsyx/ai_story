@@ -327,8 +327,8 @@
       >
         <!-- 文案改写节点 -->
         <rewrite-node-expanded
-          ref="rewriteNode"
           v-if="project"
+          ref="rewriteNode"
           :status="rewriteStage ? rewriteStage.status : 'pending'"
           :position="nodePositions.rewrite"
           :data="rewriteStage ? rewriteStage.domain_data : null"
@@ -343,15 +343,15 @@
         />
 
         <asset-extraction-node
-          ref="assetExtractionNode"
           v-if="showAssetExtractionNode"
+          ref="assetExtractionNode"
           :status="assetExtractionStage ? assetExtractionStage.status : 'pending'"
           :position="nodePositions.assetExtraction"
           :data="assetExtractionStage ? assetExtractionStage.domain_data : null"
           :project-id="project.id"
           :available-assets="availableAssets"
           @execute="handleExecuteStage"
-          @asset-bindings-updated="$emit('asset-bindings-updated')"
+          @asset-bindings-updated="handleAssetExtractionBindingsUpdated"
           @node-dblclick="focusCanvasNode('assetExtraction')"
         />
 
@@ -1618,6 +1618,11 @@ export default {
         this.loadingAssets = false;
       }
     },
+    async handleAssetExtractionBindingsUpdated() {
+      await this.loadProjectAssets();
+      this.$emit('asset-bindings-updated');
+    },
+
     async handleAssetBindingToggle(assetId) {
       const selectedIds = new Set(this.selectedAssetIds);
       if (selectedIds.has(assetId)) {
@@ -1795,7 +1800,7 @@ export default {
         + ((this.gridLayout.branchWidth - nodeWidth) / 2);
     },
 
-    getGridAllocatedHeight(rowKey, fallbackHeight) {
+    getGridAllocatedHeight(rowKey) {
       const rowSpan = this.gridLayout.rowSpans?.[rowKey] || 1;
       return rowSpan * this.gridLayout.rowUnitHeight + Math.max(rowSpan - 1, 0) * this.gridLayout.rowGap;
     },

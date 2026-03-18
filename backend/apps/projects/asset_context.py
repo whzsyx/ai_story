@@ -28,7 +28,8 @@ def build_project_asset_context(project) -> Dict[str, Any]:
             continue
 
         typed_value = asset.get_typed_value()
-        project_assets[asset.key] = typed_value
+        asset_prompt_text = asset.value if asset.variable_type == 'image' and asset.value else typed_value
+        project_assets[asset.key] = asset_prompt_text
         bound_assets.append({
             'id': str(binding.id),
             'asset_id': str(asset.id),
@@ -38,6 +39,7 @@ def build_project_asset_context(project) -> Dict[str, Any]:
             'variable_type': asset.variable_type,
             'scope': asset.scope,
             'typed_value': typed_value,
+            'prompt_text': asset.value if asset.variable_type == 'image' else '',
         })
 
     return {

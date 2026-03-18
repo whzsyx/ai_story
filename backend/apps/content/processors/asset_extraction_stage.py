@@ -91,9 +91,9 @@ class AssetExtractionStageProcessor(LLMStageProcessor):
             key = self._normalize_key(item.get('key') or item.get('label') or f'asset_{index}')
             label = str(item.get('label') or key).strip() or key
             group = str(item.get('group') or '未分组').strip() or '未分组'
-            variable_type = item.get('variable_type') or 'json'
+            variable_type = item.get('variable_type') or 'image'
             if variable_type not in {'string', 'number', 'boolean', 'json', 'image'}:
-                variable_type = 'json'
+                variable_type = 'image'
 
             value = item.get('value')
             if value is None:

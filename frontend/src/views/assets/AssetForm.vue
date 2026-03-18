@@ -135,6 +135,24 @@
             </label>
           </div>
 
+          <div
+            v-if="form.variable_type === 'image'"
+            class="form-control mb-4"
+          >
+            <label class="label">
+              <span class="label-text">提示文本</span>
+            </label>
+            <textarea
+              v-model="form.value"
+              placeholder="例如：用于文生图的主体描述、风格、构图要求"
+              class="textarea textarea-bordered h-24"
+              :class="{ 'textarea-error': errors.value }"
+            />
+            <label class="label">
+              <span class="label-text-alt">图片类型可额外保存一段文本，后续文生图优先使用这段信息</span>
+            </label>
+          </div>
+
           <!-- 资产值（非图片类型显示） -->
           <div
             v-else
@@ -297,7 +315,7 @@ export default {
       form: {
         key: '',
         value: '',
-        variable_type: 'string',
+        variable_type: 'image',
         scope: 'user',
         group: '',
         description: '',
@@ -546,7 +564,7 @@ export default {
           if (this.selectedFile) {
             formData.append('image_file', this.selectedFile);
           }
-          formData.append('value', '');
+          formData.append('value', this.form.value || '');
         } else {
           formData.append('value', this.form.value);
         }
