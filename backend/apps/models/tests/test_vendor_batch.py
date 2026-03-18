@@ -34,7 +34,8 @@ class ModelProviderVendorServiceTestCase(APITestCase):
         self.assertEqual(result['vendor'], 'openai')
         self.assertEqual(result['capability'], 'llm')
         self.assertEqual([item['id'] for item in result['models']], ['gpt-4o-mini', 'o1-preview'])
-        self.assertTrue(all(item['is_recommended'] for item in result['models']))
+        self.assertTrue(result['models'][0]['is_capability_match'])
+        self.assertTrue(result['models'][1]['is_capability_match'])
 
     def test_batch_create_vendor_models_skips_existing(self):
         ModelProvider.objects.create(
@@ -149,6 +150,82 @@ class ModelProviderVendorServiceTestCase(APITestCase):
         self.assertEqual(video_provider.provider_type, 'image2video')
         self.assertEqual(video_provider.executor_class, 'core.ai_client.image2video_client.VideoGeneratorClient')
 
+
+    @patch('apps.models.services.requests.get')
+    def test_discover_vendor_models_excludes_audio_and_rerank_models(self, mock_get):
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            'data': [
+                {'id': 'tts-1-hd'},
+                {'id': 'speech-recognition-v1'},
+                {'id': 'bge-rerank-v2'},
+                {'id': 'gpt-4o-mini'},
+            ]
+        }
+        mock_get.return_value = mock_response
+
+        result = ModelProviderService.discover_vendor_models('openai', 'llm', 'sk-test')
+
+        self.assertEqual([item['id'] for item in result['models']], ['gpt-4o-mini'])
+
+    @patch('apps.models.services.requests.get')
+    def test_discover_vendor_models_does_not_mark_video_as_llm_match(self, mock_get):
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            'data': [
+                {'id': 'doubao-seaweed-241128', 'domain': 'VideoGeneration'},
+                {'id': 'doubao-pro-32k-241215', 'domain': 'LLM'},
+            ]
+        }
+        mock_get.return_value = mock_response
+
+        result = ModelProviderService.discover_vendor_models('volcengine', 'llm', 'sk-test')
+
+        video_model = next(item for item in result['models'] if item['id'] == 'doubao-seaweed-241128')
+        llm_model = next(item for item in result['models'] if item['id'] == 'doubao-pro-32k-241215')
+        self.assertEqual(video_model['classified_capability'], 'image2video')
+        self.assertFalse(video_model['is_capability_match'])
+        self.assertTrue(llm_model['is_capability_match'])
+
+    @patch('apps.models.services.requests.get')
+    def test_discover_vendor_models_filters_embedding_models(self, mock_get):
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            'data': [
+                {'id': 'doubao-embedding-text-240715', 'domain': 'Embedding'},
+                {'id': 'embbeding-test-model'},
+                {'id': 'doubao-pro-32k-241215', 'domain': 'LLM'},
+            ]
+        }
+        mock_get.return_value = mock_response
+
+        result = ModelProviderService.discover_vendor_models('volcengine', 'llm', 'sk-test')
+
+        self.assertEqual([item['id'] for item in result['models']], ['doubao-pro-32k-241215'])
+
+    @patch('apps.models.services.requests.get')
+    def test_discover_vendor_models_prefers_vendor_metadata_classification(self, mock_get):
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            'data': [
+                {'id': 'doubao-embedding-text-240715', 'domain': 'Embedding'},
+                {'id': 'doubao-seaweed-241128', 'domain': 'VideoGeneration'},
+                {'id': 'doubao-pro-32k-241215', 'domain': 'LLM'},
+            ]
+        }
+        mock_get.return_value = mock_response
+
+        result = ModelProviderService.discover_vendor_models('volcengine', 'image2video', 'sk-test')
+
+        self.assertEqual(result['models'][0]['id'], 'doubao-seaweed-241128')
+        self.assertEqual(result['models'][0]['classified_capability'], 'image2video')
+        self.assertTrue(result['models'][0]['is_capability_match'])
+        self.assertNotIn('doubao-embedding-text-240715', [item['id'] for item in result['models']])
+
     @patch('apps.models.services.requests.get')
     def test_discover_vendor_models_marks_recommended(self, mock_get):
         mock_response = Mock()
@@ -156,7 +233,7 @@ class ModelProviderVendorServiceTestCase(APITestCase):
         mock_response.json.return_value = {
             'data': [
                 {'id': 'gemini-2.5-pro'},
-                {'id': 'gemini-1.0-legacy'},
+                {'id': 'imagen-3.0-generate-002'},
             ]
         }
         mock_get.return_value = mock_response
@@ -164,8 +241,10 @@ class ModelProviderVendorServiceTestCase(APITestCase):
         result = ModelProviderService.discover_vendor_models('gemini', 'llm', 'sk-test')
 
         self.assertEqual(result['models'][0]['id'], 'gemini-2.5-pro')
-        self.assertTrue(result['models'][0]['is_recommended'])
-        self.assertFalse(result['models'][1]['is_recommended'])
+        self.assertEqual(result['models'][0]['classified_capability'], 'llm')
+        self.assertTrue(result['models'][0]['is_capability_match'])
+        self.assertEqual(result['models'][1]['classified_capability'], 'text2image')
+        self.assertFalse(result['models'][1]['is_capability_match'])
 
 
 class ModelProviderVendorViewSetTestCase(APITestCase):
@@ -220,7 +299,9 @@ class ModelProviderVendorViewSetTestCase(APITestCase):
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data['capability'], 'llm')
-        self.assertEqual([item['id'] for item in response.data['models']], ['qwen-plus'])
+        self.assertEqual([item['id'] for item in response.data['models']], ['qwen-plus', 'wanx-image'])
+        self.assertTrue(response.data['models'][0]['is_capability_match'])
+        self.assertEqual(response.data['models'][1]['classified_capability'], 'text2image')
 
     def test_batch_create_vendor_models_endpoint(self):
         response = self.client.post('/api/v1/models/providers/batch_create_vendor_models/', {

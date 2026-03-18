@@ -6,13 +6,65 @@
 
 import inspect
 import requests
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, Optional, List, Iterable
 from django.db import transaction
 from django.db.models import Q, Avg, Sum
 from asgiref.sync import sync_to_async
 from .models import ModelProvider, ModelUsageLog
 from .vendor_catalog import VENDOR_CATALOG
 from urllib.parse import urlparse
+
+
+CAPABILITY_LABELS = {
+    'llm': '语言模型',
+    'text2image': '文生图',
+    'image2video': '图生视频',
+    'image_edit': '图片编辑',
+}
+
+CAPABILITY_CLASSIFICATION_PATTERNS = {
+    'llm': [
+        'gpt', 'o1', 'o3', 'o4', 'claude', 'qwen', 'deepseek', 'gemini', 'grok',
+        'glm', 'moonshot', 'kimi', 'doubao', 'abab', 'minimax', 'llama', 'mistral',
+    ],
+    'text2image': [
+        'gpt-image', 'dall-e', 'dalle', 'flux', 'sdxl', 'stable-diffusion', 'wanx',
+        'seedream', 'imagen', 't2i',
+    ],
+    'image2video': [
+        'video', 'i2v', 'veo', 'kling', 'seedance', 'wan', 's2v',
+    ],
+    'image_edit': [
+        'edit', 'edits', 'inpaint', 'image-edit', 'img2img',
+    ],
+}
+
+METADATA_CAPABILITY_MAP = {
+    'llm': 'llm',
+    'chat': 'llm',
+    'textgeneration': 'llm',
+    'text_generation': 'llm',
+    'vlm': 'llm',
+    'multimodal': 'llm',
+    'imagegeneration': 'text2image',
+    'text2image': 'text2image',
+    'text_to_image': 'text2image',
+    'image_generation': 'text2image',
+    'videogeneration': 'image2video',
+    'image2video': 'image2video',
+    'image_to_video': 'image2video',
+    'video_generation': 'image2video',
+    'imageedit': 'image_edit',
+    'imageediting': 'image_edit',
+    'image_edit': 'image_edit',
+    'inpaint': 'image_edit',
+    'embedding': None,
+}
+
+EXCLUDED_MODEL_TOKENS = [
+    'embedding', 'embbeding', 'vector', 'rerank', 'tts', 'asr', 'speech', 'audio',
+    'transcription', 'recognition', 'voice', 'moderation', 'safety',
+]
 
 
 class ModelProviderService:
@@ -163,6 +215,89 @@ class ModelProviderService:
         return vendors
 
     @staticmethod
+    def _normalize_capability_token(value: Any) -> str:
+        if value is None:
+            return ''
+        return str(value).strip().lower().replace('-', '').replace(' ', '')
+
+    @staticmethod
+    def _iter_metadata_values(value: Any) -> Iterable[str]:
+        if value is None:
+            return []
+        if isinstance(value, dict):
+            items = []
+            for key, item in value.items():
+                items.append(str(key))
+                items.extend(ModelProviderService._iter_metadata_values(item))
+            return items
+        if isinstance(value, (list, tuple, set)):
+            items = []
+            for item in value:
+                items.extend(ModelProviderService._iter_metadata_values(item))
+            return items
+        return [str(value)]
+
+    @staticmethod
+    def _should_exclude_model(item: Dict[str, Any], model_key: str) -> bool:
+        metadata_values = []
+        for field in ('domain', 'task_type', 'modalities', 'features'):
+            metadata_values.extend(ModelProviderService._iter_metadata_values(item.get(field)))
+
+        normalized_metadata = [
+            ModelProviderService._normalize_capability_token(value)
+            for value in metadata_values
+        ]
+        if any(token in normalized for normalized in normalized_metadata for token in EXCLUDED_MODEL_TOKENS):
+            return True
+
+        return any(token in model_key for token in EXCLUDED_MODEL_TOKENS)
+
+    @staticmethod
+    def _classify_capability_from_metadata(item: Dict[str, Any]) -> Optional[str]:
+        candidates = []
+        for field in ('domain', 'task_type', 'modalities', 'features'):
+            candidates.extend(ModelProviderService._iter_metadata_values(item.get(field)))
+
+        has_metadata = False
+        for candidate in candidates:
+            normalized = ModelProviderService._normalize_capability_token(candidate)
+            if not normalized:
+                continue
+            has_metadata = True
+            if normalized in METADATA_CAPABILITY_MAP:
+                mapped_value = METADATA_CAPABILITY_MAP[normalized]
+                return mapped_value if mapped_value is not None else ''
+
+            if 'embedding' in normalized:
+                return ''
+            if any(keyword in normalized for keyword in ['videogeneration', 'image2video', 'imagetovideo', 'i2v']):
+                return 'image2video'
+            if any(keyword in normalized for keyword in ['imagegeneration', 'texttoimage', 'text2image', 't2i']):
+                return 'text2image'
+            if any(keyword in normalized for keyword in ['imageedit', 'imageediting', 'img2img', 'inpaint']):
+                return 'image_edit'
+            if any(keyword in normalized for keyword in ['llm', 'chat', 'vlm', 'multimodal', 'textgeneration']):
+                return 'llm'
+
+        return '' if has_metadata else None
+
+    @staticmethod
+    def _classify_capability_from_name(model_key: str, capability: str) -> Optional[str]:
+        capability_scores = {
+            provider_type: sum(1 for keyword in keywords if keyword in model_key)
+            for provider_type, keywords in CAPABILITY_CLASSIFICATION_PATTERNS.items()
+        }
+        matched_types = [
+            provider_type for provider_type, score in capability_scores.items() if score > 0
+        ]
+        if not matched_types:
+            return None
+        return max(
+            matched_types,
+            key=lambda provider_type: (capability_scores[provider_type], provider_type == capability),
+        )
+
+    @staticmethod
     def discover_vendor_models(vendor: str, capability: str, api_key: str, api_url: Optional[str] = None) -> Dict[str, Any]:
         """从内置厂商拉取指定能力的模型列表。"""
         vendor_config = VENDOR_CATALOG[vendor]
@@ -188,28 +323,47 @@ class ModelProviderService:
         payload = response.json()
         models_data = payload.get('data', payload if isinstance(payload, list) else [])
 
-        filtered_models = []
-        filters = [item.lower() for item in capability_config.get('model_filter', [])]
-        recommended_patterns = [item.lower() for item in capability_config.get('recommended_patterns', [])]
+        capability_hints = {
+            item.lower()
+            for item in (
+                capability_config.get('model_filter', []) +
+                capability_config.get('recommended_patterns', []) +
+                CAPABILITY_CLASSIFICATION_PATTERNS.get(capability, [])
+            )
+        }
+
+        discovered_models = []
         for item in models_data:
             model_id = str(item.get('id') or item.get('name') or '').strip()
             if not model_id:
                 continue
 
             model_key = model_id.lower()
-            if filters and not any(keyword in model_key for keyword in filters):
+            if ModelProviderService._should_exclude_model(item, model_key):
                 continue
+            metadata_capability = ModelProviderService._classify_capability_from_metadata(item)
+            if metadata_capability is None:
+                classified_capability = ModelProviderService._classify_capability_from_name(model_key, capability)
+            else:
+                classified_capability = metadata_capability or None
 
-            is_recommended = any(keyword in model_key for keyword in recommended_patterns) if recommended_patterns else False
-            filtered_models.append({
+            if classified_capability is not None:
+                is_capability_match = classified_capability == capability
+            else:
+                is_capability_match = any(keyword in model_key for keyword in capability_hints)
+
+            discovered_models.append({
                 'id': model_id,
                 'name': item.get('name') or model_id,
                 'owned_by': item.get('owned_by') or item.get('provider') or '',
                 'context_length': item.get('context_length') or item.get('context_window') or None,
-                'is_recommended': is_recommended,
+                'classified_capability': classified_capability,
+                'classified_capability_label': CAPABILITY_LABELS.get(classified_capability, '未分类') if classified_capability else '未分类',
+                'is_capability_match': is_capability_match,
+                'is_recommended': is_capability_match,
             })
 
-        filtered_models.sort(key=lambda item: (not item['is_recommended'], item['id']))
+        discovered_models.sort(key=lambda item: (not item['is_capability_match'], item['id']))
 
         return {
             'vendor': vendor,
@@ -217,7 +371,7 @@ class ModelProviderService:
             'capability': capability,
             'provider_type': capability_config['provider_type'],
             'api_url': capability_config['api_url'],
-            'models': filtered_models,
+            'models': discovered_models,
         }
 
     @staticmethod

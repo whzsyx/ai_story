@@ -6,7 +6,7 @@
           添加模型
         </h1>
         <p class="page-subtitle">
-          支持内置厂商批量导入，也支持自定义厂商手动添加单个模型
+          选择创建方式后，按统一步骤完成模型接入
         </p>
       </div>
       <div class="header-actions">
@@ -37,6 +37,38 @@
       </button>
     </div>
 
+    <section class="panel-card mode-guide-card">
+      <div class="card-top">
+        <div>
+          <h2 class="card-title">
+            {{ currentModeMeta.title }}
+          </h2>
+          <p class="card-desc">
+            {{ currentModeMeta.description }}
+          </p>
+        </div>
+        <span class="pill">{{ currentModeMeta.pill }}</span>
+      </div>
+
+      <div class="mode-guide-steps">
+        <div
+          v-for="(step, index) in currentFlowSteps"
+          :key="step.title"
+          class="mode-guide-step"
+        >
+          <span class="mode-guide-step-index">{{ index + 1 }}</span>
+          <div class="mode-guide-step-main">
+            <div class="mode-guide-step-title">
+              {{ step.title }}
+            </div>
+            <div class="mode-guide-step-desc">
+              {{ step.description }}
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
     <section
       v-if="createMode === 'builtin'"
       class="builtin-mode"
@@ -46,10 +78,10 @@
           <div class="card-top">
             <div>
               <h2 class="card-title">
-                厂商配置
+                第一步 · 来源配置
               </h2>
               <p class="card-desc">
-                系统内置厂商会带出默认地址，也支持按模型能力改成自定义网关地址
+                选择内置厂商、模型能力和访问凭证，默认会带出该能力的预设地址
               </p>
             </div>
             <span class="pill">内置厂商</span>
@@ -130,10 +162,10 @@
           <div class="card-top">
             <div>
               <h2 class="card-title">
-                批量创建默认配置
+                第二步 · 默认配置
               </h2>
               <p class="card-desc">
-                这些配置会应用到本次创建的全部模型
+                这些默认参数会应用到本次批量创建的全部模型
               </p>
             </div>
           </div>
@@ -226,18 +258,14 @@
               class="status-filters"
             >
               <button
+                v-for="filter in classificationFilters"
+                :key="filter.value"
                 class="status-filter-btn"
-                :class="{ active: modelFilterMode === 'recommended' }"
-                @click="setModelFilterMode('recommended')"
+                :class="{ active: modelFilterMode === filter.value }"
+                @click="setModelFilterMode(filter.value)"
               >
-                推荐模型
-              </button>
-              <button
-                class="status-filter-btn"
-                :class="{ active: modelFilterMode === 'all' }"
-                @click="setModelFilterMode('all')"
-              >
-                全部模型
+                {{ filter.label }}
+                <span class="filter-count">{{ filter.count }}</span>
               </button>
             </div>
             <button
@@ -269,10 +297,10 @@
           class="empty-state"
         >
           <div class="empty-hero">
-            还没有模型列表
+            等待拉取可创建模型
           </div>
           <p class="empty-hint">
-            先选择厂商、模型能力并填写 API Key，再拉取该能力下可用模型
+            先完成第一步来源配置，再拉取该能力下可批量导入的模型列表
           </p>
         </div>
 
@@ -295,14 +323,20 @@
               <div class="model-option-title">
                 {{ model.name || model.id }}
                 <span
-                  v-if="model.is_recommended"
+                  v-if="model.is_capability_match || model.classified_capability_label"
                   class="recommend-badge"
                 >
-                  推荐
+                  {{ model.classified_capability_label || selectedCapabilityFilterLabel }}
                 </span>
               </div>
               <div class="model-option-desc">
                 {{ model.id }}
+              </div>
+              <div
+                v-if="model.classified_capability_label"
+                class="model-option-meta"
+              >
+                分类：{{ model.classified_capability_label }}
               </div>
             </div>
           </label>
@@ -388,10 +422,10 @@
           <div class="card-top">
             <div>
               <h2 class="card-title">
-                基础信息
+                第一步 · 来源配置
               </h2>
               <p class="card-desc">
-                配置模型名称、类型、执行器与访问地址
+                填写自定义厂商模型的基础信息、能力类型与访问配置
               </p>
             </div>
           </div>
@@ -537,7 +571,7 @@
           <div class="card-top">
             <div>
               <h2 class="card-title">
-                文生图参数配置
+                第二步 · 能力参数
               </h2>
               <p class="card-desc">
                 设置默认输出尺寸
@@ -580,7 +614,7 @@
           <div class="card-top">
             <div>
               <h2 class="card-title">
-                图生视频参数配置
+                第二步 · 能力参数
               </h2>
               <p class="card-desc">
                 设置默认帧率与时长
@@ -621,7 +655,7 @@
           <div class="card-top">
             <div>
               <h2 class="card-title">
-                图片编辑参数配置
+                第二步 · 能力参数
               </h2>
               <p class="card-desc">
                 设置默认画布尺寸与重绘强度
@@ -673,10 +707,10 @@
           <div class="card-top">
             <div>
               <h2 class="card-title">
-                通用配置
+                第三步 · 默认配置
               </h2>
               <p class="card-desc">
-                控制超时、限流和启用状态
+                设置优先级、限流、超时和启用状态
               </p>
             </div>
           </div>
@@ -743,7 +777,7 @@
             class="primary-action"
             :disabled="submittingManual"
           >
-            {{ submittingManual ? '保存中...' : '保存模型' }}
+            {{ submittingManual ? '创建中...' : '创建模型' }}
           </button>
           <button
             type="button"
@@ -762,6 +796,8 @@
 <script>
 import { mapActions } from 'vuex'
 import { modelProviderApi } from '@/api/models'
+
+const VENDOR_API_KEY_STORAGE_KEY = 'model_vendor_api_keys'
 
 export default {
   name: 'ModelCreate',
@@ -785,7 +821,7 @@ export default {
       },
       discoveredModels: [],
       selectedModelNames: [],
-      modelFilterMode: 'recommended',
+      modelFilterMode: 'all',
       discovering: false,
       submittingBatch: false,
       submitBatchResult: null,
@@ -828,17 +864,90 @@ export default {
     selectedCapability() {
       return this.availableCapabilities.find((item) => item.key === this.vendorForm.capability) || null
     },
+    currentModeMeta() {
+      if (this.createMode === 'builtin') {
+        return {
+          title: '内置厂商导入',
+          description: '适合已经接入主流厂商的场景，只需填写 API Key 和可选网关地址，即可批量导入模型。',
+          pill: '批量导入'
+        }
+      }
+      return {
+        title: '自定义厂商创建',
+        description: '适合私有网关、代理服务或未内置的模型平台，按能力类型手动创建单个模型。',
+        pill: '手动创建'
+      }
+    },
+    currentFlowSteps() {
+      if (this.createMode === 'builtin') {
+        return [
+          { title: '配置来源', description: '选择厂商、能力、API 地址与 API Key' },
+          { title: '设置默认参数', description: '统一设置超时、Token 与限流配置' },
+          { title: '拉取并创建模型', description: '勾选推荐或全部模型后批量创建' }
+        ]
+      }
+      return [
+        { title: '填写基础信息', description: '配置别名、能力类型、执行器和访问地址' },
+        { title: '补充能力参数', description: '按文生图、图生视频或图片编辑补充默认参数' },
+        { title: '完成创建', description: '设置通用配置后直接创建单个模型' }
+      ]
+    },
+    selectedCapabilityFilterLabel() {
+      if (!this.selectedCapability) {
+        return '能力匹配模型'
+      }
+      return this.getProviderTypeLabel(this.selectedCapability.provider_type)
+    },
     canDiscover() {
       return Boolean(this.vendorForm.vendor && this.vendorForm.capability && this.vendorForm.api_key)
     },
-    recommendedModels() {
-      return this.discoveredModels.filter((item) => item.is_recommended)
+    classificationFilters() {
+      const counts = this.discoveredModels.reduce((result, item) => {
+        const key = item.classified_capability || 'unclassified'
+        result[key] = (result[key] || 0) + 1
+        return result
+      }, {})
+      const filters = []
+      const preferredKey = this.selectedCapability?.provider_type || this.vendorForm.capability
+      if (preferredKey && counts[preferredKey]) {
+        filters.push({
+          value: preferredKey,
+          label: this.getProviderTypeLabel(preferredKey),
+          count: counts[preferredKey]
+        })
+      }
+      ['llm', 'text2image', 'image2video', 'image_edit'].forEach((key) => {
+        if (!counts[key] || key === preferredKey) {
+          return
+        }
+        filters.push({
+          value: key,
+          label: this.getProviderTypeLabel(key),
+          count: counts[key]
+        })
+      })
+      if (counts.unclassified) {
+        filters.push({
+          value: 'unclassified',
+          label: '未分类',
+          count: counts.unclassified
+        })
+      }
+      filters.push({
+        value: 'all',
+        label: '全部模型',
+        count: this.discoveredModels.length
+      })
+      return filters
     },
     visibleModels() {
-      if (this.modelFilterMode === 'recommended' && this.recommendedModels.length) {
-        return this.recommendedModels
+      if (this.modelFilterMode === 'all') {
+        return this.discoveredModels
       }
-      return this.discoveredModels
+      if (this.modelFilterMode === 'unclassified') {
+        return this.discoveredModels.filter((item) => !item.classified_capability)
+      }
+      return this.discoveredModels.filter((item) => item.classified_capability === this.modelFilterMode)
     }
   },
   watch: {
@@ -857,6 +966,7 @@ export default {
       const capabilities = vendor?.capabilities || []
       if (!capabilities.length) {
         this.vendorForm.capability = 'llm'
+        this.vendorForm.api_key = this.getStoredVendorApiKey(value)
         return
       }
       if (!capabilities.some((item) => item.key === this.vendorForm.capability)) {
@@ -865,6 +975,7 @@ export default {
       this.discoveredModels = []
       this.selectedModelNames = []
       this.submitBatchResult = null
+      this.vendorForm.api_key = this.getStoredVendorApiKey(value)
       this.syncVendorApiUrl()
     },
     'vendorForm.capability'() {
@@ -920,6 +1031,38 @@ export default {
       return this.selectedCapability?.api_url || '请输入完整的 API 地址'
     },
 
+    getVendorApiKeyStore() {
+      try {
+        const rawValue = localStorage.getItem(VENDOR_API_KEY_STORAGE_KEY)
+        return rawValue ? JSON.parse(rawValue) : {}
+      } catch (error) {
+        console.warn('读取厂商 API Key 缓存失败:', error)
+        return {}
+      }
+    },
+
+    getStoredVendorApiKey(vendor) {
+      if (!vendor) {
+        return ''
+      }
+      const store = this.getVendorApiKeyStore()
+      return store[vendor] || ''
+    },
+
+    persistVendorApiKey(vendor, apiKey) {
+      if (!vendor) {
+        return
+      }
+      const store = this.getVendorApiKeyStore()
+      const nextApiKey = (apiKey || '').trim()
+      if (nextApiKey) {
+        store[vendor] = nextApiKey
+      } else {
+        delete store[vendor]
+      }
+      localStorage.setItem(VENDOR_API_KEY_STORAGE_KEY, JSON.stringify(store))
+    },
+
     async loadVendors() {
       try {
         const response = await modelProviderApi.getBuiltinVendors()
@@ -945,11 +1088,15 @@ export default {
           api_key: this.vendorForm.api_key,
           api_url: this.vendorForm.api_url
         })
+        this.persistVendorApiKey(this.vendorForm.vendor, this.vendorForm.api_key)
         this.discoveredModels = response.models || []
-        this.modelFilterMode = this.discoveredModels.some((item) => item.is_recommended) ? 'recommended' : 'all'
-        const defaultModels = this.modelFilterMode === 'recommended'
-          ? this.discoveredModels.filter((item) => item.is_recommended)
-          : this.discoveredModels
+        const preferredMode = this.selectedCapability?.provider_type || this.vendorForm.capability
+        this.modelFilterMode = this.discoveredModels.some((item) => item.classified_capability === preferredMode)
+          ? preferredMode
+          : 'all'
+        const defaultModels = this.modelFilterMode === 'all'
+          ? this.discoveredModels
+          : this.discoveredModels.filter((item) => item.classified_capability === this.modelFilterMode)
         this.selectedModelNames = defaultModels.map((item) => item.id)
         if (!this.discoveredModels.length) {
           await this.$alert('当前厂商未返回可导入模型', '拉取完成', { tone: 'warning' })
@@ -1002,6 +1149,7 @@ export default {
           rate_limit_rpd: this.vendorForm.rate_limit_rpd,
           priority: this.vendorForm.priority
         })
+        this.persistVendorApiKey(this.vendorForm.vendor, this.vendorForm.api_key)
         this.submitBatchResult = response
         await this.$alert(
           `创建完成：新增 ${response.created_count} 个，跳过 ${response.skipped_count} 个`,
@@ -1171,6 +1319,68 @@ export default {
   background: rgba(94, 234, 212, 0.2);
   border-color: rgba(94, 234, 212, 0.5);
   color: #e2e8f0;
+}
+
+.mode-guide-card {
+  margin-bottom: 1.25rem;
+}
+
+.mode-guide-steps {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.85rem;
+}
+
+.mode-guide-step {
+  display: flex;
+  gap: 0.8rem;
+  align-items: flex-start;
+  padding: 0.95rem 1rem;
+  border-radius: 16px;
+  background: rgba(148, 163, 184, 0.1);
+}
+
+.layout-shell.theme-dark .mode-guide-step {
+  background: rgba(30, 41, 59, 0.6);
+}
+
+.mode-guide-step-index {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  flex-shrink: 0;
+  border-radius: 999px;
+  background: rgba(20, 184, 166, 0.16);
+  color: #0f172a;
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.layout-shell.theme-dark .mode-guide-step-index {
+  background: rgba(94, 234, 212, 0.2);
+  color: #e2e8f0;
+}
+
+.mode-guide-step-title {
+  color: #0f172a;
+  font-weight: 600;
+}
+
+.layout-shell.theme-dark .mode-guide-step-title {
+  color: #e2e8f0;
+}
+
+.mode-guide-step-desc {
+  margin-top: 0.25rem;
+  color: #64748b;
+  font-size: 0.84rem;
+  line-height: 1.5;
+}
+
+.layout-shell.theme-dark .mode-guide-step-desc {
+  color: #94a3b8;
 }
 
 .content-grid {
@@ -1457,7 +1667,17 @@ export default {
   word-break: break-all;
 }
 
+.model-option-meta {
+  margin-top: 0.35rem;
+  color: #94a3b8;
+  font-size: 0.76rem;
+}
+
 .layout-shell.theme-dark .model-option-desc {
+  color: #94a3b8;
+}
+
+.layout-shell.theme-dark .model-option-meta {
   color: #94a3b8;
 }
 
@@ -1469,6 +1689,12 @@ export default {
   font-size: 0.72rem;
   background: rgba(20, 184, 166, 0.16);
   color: #0f766e;
+}
+
+.filter-count {
+  margin-left: 0.35rem;
+  opacity: 0.8;
+  font-size: 0.78rem;
 }
 
 .layout-shell.theme-dark .recommend-badge {
@@ -1589,6 +1815,7 @@ export default {
 }
 
 @media (max-width: 1024px) {
+  .mode-guide-steps,
   .content-grid,
   .compact-grid,
   .form-grid-3 {
