@@ -4,6 +4,13 @@
 
 ![logo](logo.png)
 
+<div class="column" align="middle">
+    <a href="https://www.python.org/downloads/"><img src="https://img.shields.io/badge/Python-3.11-blue.svg" alt=""></a>
+   <img src="https://img.shields.io/github/stars/xhongc/ai_story?color=informational&label=Stars">
+  <img src="https://img.shields.io/docker/pulls/xhongc/ai_story" alt="docker-pull-count" />
+  <img src="https://img.shields.io/badge/platform-amd64/arm64-pink?style=plastic" alt="docker-platform" />
+</div>
+
 
 > 🎬 **从文案到视频，一键生成** - 让AI帮你创作专业的故事视频
 
