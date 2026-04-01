@@ -49,6 +49,8 @@ class AgentGateway:
             '你是 AI Story 的页面助手。'
             '你可以结合业务上下文给出简洁建议。'
             '你不能假设自己直接操作浏览器。'
+            '除非用户明确要求，否则不要主动搜索代码、不要调用工具、不要进入长链路研究。'
+            '优先直接根据 system prompt 中提供的业务上下文与 UI 上下文回答。'
             '如果需要前端执行动作，请在回复末尾输出 fenced code block，标签必须是 agent-ui，JSON 结构为 {"ui_intents": [...]}。'
             'intent 只能从 allowed_ui_actions 中选择。'
             '正文保持简洁，先解释，再给 0-3 个动作。'
@@ -188,6 +190,16 @@ class AgentGateway:
                     if part.get('sessionID') != remote_session_id:
                         continue
                     if assistant_message_id and part.get('messageID') != assistant_message_id:
+                        continue
+                    if part.get('type') == 'step-start':
+                        yield {'type': 'status', 'status': '正在整理回答...'}
+                        continue
+                    if part.get('type') == 'tool':
+                        tool_name = part.get('tool') or '工具'
+                        yield {'type': 'status', 'status': f'正在调用 {tool_name}...'}
+                        continue
+                    if part.get('type') == 'reasoning':
+                        yield {'type': 'status', 'status': '正在分析当前问题...'}
                         continue
                     if part.get('type') == 'text' and part.get('text') and not accumulated_text:
                         accumulated_text = part.get('text') or ''

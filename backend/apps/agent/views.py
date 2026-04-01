@@ -191,3 +191,21 @@ class AgentSessionAbortView(APIView):
             except Exception:
                 pass
         return Response({'accepted': True})
+
+
+class AgentSessionClearView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, scope_key):
+        manager = AgentSessionManager()
+        session = manager.snapshot_session(request.user.id, scope_key)
+        remote_session_id = (session or {}).get('agent_session_id')
+        if remote_session_id:
+            gateway = AgentGateway()
+            try:
+                gateway.abort_session(remote_session_id)
+            except Exception:
+                pass
+
+        manager.clear_session(request.user.id, scope_key)
+        return Response({'accepted': True})

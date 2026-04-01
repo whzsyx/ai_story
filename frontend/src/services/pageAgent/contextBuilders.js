@@ -39,10 +39,10 @@ export const buildFallbackPageAgentContext = (route) => ({
   pageType: 'generic',
   title: route.meta?.title || '当前页面',
   subtitle: '页面助手',
-  summary: '我可以先帮你解释这个页面的结构、主要入口和下一步可操作项。',
+  summary: '我会结合当前页面进度，帮你判断下一步，并引导你使用合适的功能入口。',
   quickActions: [
-    '这个页面现在在做什么？',
-    '帮我总结一下这里的主要入口',
+    '我现在适合先做什么？',
+    '推荐我下一步该用哪个入口',
   ],
   capabilities: [],
   meta: {

@@ -28,5 +28,9 @@ export default {
     return apiClient.post(`/agent/session/${encodeURIComponent(scopeKey)}/abort/`);
   },
 
+  clear(scopeKey) {
+    return apiClient.post(`/agent/session/${encodeURIComponent(scopeKey)}/clear/`);
+  },
+
   buildStreamUrl,
 };

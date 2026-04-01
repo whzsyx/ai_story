@@ -54,6 +54,10 @@ export default {
     return agentApi.abort(scopeKey);
   },
 
+  clear(scopeKey) {
+    return agentApi.clear(scopeKey);
+  },
+
   async consumeStream({ scopeKey, streamToken, accessToken, signal, onEvent }) {
     const response = await fetch(agentApi.buildStreamUrl(scopeKey, streamToken, accessToken), {
       method: 'GET',

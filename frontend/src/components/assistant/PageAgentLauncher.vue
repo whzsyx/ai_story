@@ -13,6 +13,7 @@
       @input="updateDraft"
       @submit="sendCurrentDraft"
       @stop="abort"
+      @clear-session="clearSession"
       @quick-action="sendMessage"
       @execute-suggestion="executeSuggestion"
     />
@@ -71,7 +72,7 @@ export default {
     },
   },
   methods: {
-    ...mapActions('assistant', ['toggle', 'close', 'updateDraft', 'sendMessage', 'executeSuggestion', 'registerContext', 'abort']),
+    ...mapActions('assistant', ['toggle', 'close', 'updateDraft', 'sendMessage', 'executeSuggestion', 'registerContext', 'abort', 'clearSession']),
     ensureFallbackContext() {
       if (
         this.currentContext

@@ -153,7 +153,7 @@ AGENT_SERVER_PASSWORD = os.getenv('AGENT_SERVER_PASSWORD', '').strip()
 AGENT_MODEL_PROVIDER_ID = os.getenv('AGENT_MODEL_PROVIDER_ID', 'opencode').strip()
 AGENT_MODEL_ID = os.getenv('AGENT_MODEL_ID', 'big-pickle').strip()
 AGENT_MODEL_VARIANT = os.getenv('AGENT_MODEL_VARIANT', '').strip()
-AGENT_REMOTE_AGENT_NAME = os.getenv('AGENT_REMOTE_AGENT_NAME', '').strip()
+AGENT_REMOTE_AGENT_NAME = os.getenv('AGENT_REMOTE_AGENT_NAME', 'build').strip()
 
 # JWT配置
 SIMPLE_JWT = {

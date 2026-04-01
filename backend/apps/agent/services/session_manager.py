@@ -85,3 +85,6 @@ class AgentSessionManager:
     def snapshot_session(self, user_id, scope_key):
         session = self.get_session(user_id, scope_key)
         return deepcopy(session) if session else None
+
+    def clear_session(self, user_id, scope_key):
+        cache.delete(_session_key(user_id, scope_key))

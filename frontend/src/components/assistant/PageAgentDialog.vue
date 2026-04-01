@@ -18,17 +18,28 @@
               {{ contextSubtitle }}
             </p>
           </div>
-          <button
-            class="dialog-close"
-            type="button"
-            @click="$emit('close')"
-          >
-            ×
-          </button>
+          <div class="dialog-header-actions">
+            <button
+              v-if="showClearSession"
+              class="dialog-ghost-action"
+              type="button"
+              :disabled="streaming"
+              @click="$emit('clear-session')"
+            >
+              清空会话
+            </button>
+            <button
+              class="dialog-close"
+              type="button"
+              @click="$emit('close')"
+            >
+              ×
+            </button>
+          </div>
         </div>
 
         <div
-          v-if="quickActions.length"
+          v-if="showQuickActions"
           class="quick-actions"
         >
           <button
@@ -60,12 +71,15 @@
           </div>
 
           <article
-            v-for="message in messages"
+            v-for="message in displayedMessages"
             :key="message.id"
             :class="['message-card', `role-${message.role}`]"
           >
             <div class="message-meta">
-              <span class="message-role">
+              <span
+                v-if="message.role !== 'system'"
+                class="message-role"
+              >
                 {{ message.role === 'user' ? '你' : '页面助手' }}
               </span>
               <span
@@ -96,6 +110,14 @@
               </button>
             </div>
           </article>
+        </div>
+
+        <div
+          v-if="floatingStatus"
+          class="floating-status"
+        >
+          <span class="floating-status-dot" />
+          <span class="floating-status-text">{{ floatingStatus.content }}</span>
         </div>
 
         <div class="composer-card">
@@ -173,6 +195,26 @@ export default {
       default: false,
     },
   },
+  computed: {
+    displayedMessages() {
+      return this.messages.filter((message) => message.role !== 'system');
+    },
+    showQuickActions() {
+      return !this.streaming && this.quickActions.length > 0 && this.displayedMessages.length <= 1;
+    },
+    showClearSession() {
+      return this.displayedMessages.length > 1;
+    },
+    floatingStatus() {
+      for (let index = this.messages.length - 1; index >= 0; index -= 1) {
+        const message = this.messages[index];
+        if (message.role === 'system' && message.pending) {
+          return message;
+        }
+      }
+      return null;
+    },
+  },
   watch: {
     messages: {
       deep: true,
@@ -244,6 +286,7 @@ export default {
 }
 
 .dialog-header,
+.dialog-header-actions,
 .composer-footer,
 .message-meta,
 .composer-actions {
@@ -260,6 +303,10 @@ export default {
 
 .dialog-header-main {
   min-width: 0;
+}
+
+.dialog-header-actions {
+  flex: 0 0 auto;
 }
 
 .dialog-eyebrow {
@@ -296,6 +343,7 @@ export default {
 }
 
 .dialog-close,
+.dialog-ghost-action,
 .quick-action-btn,
 .suggestion-btn,
 .primary-action,
@@ -312,6 +360,16 @@ export default {
   color: #0f172a;
   font-size: 1.2rem;
   line-height: 1;
+}
+
+.dialog-ghost-action {
+  padding: 0.46rem 0.78rem;
+  border-radius: 999px;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  background: rgba(255, 255, 255, 0.78);
+  color: #64748b;
+  font-size: 0.74rem;
+  font-weight: 600;
 }
 
 .summary-card,
@@ -377,6 +435,7 @@ export default {
 }
 
 .layout-shell.theme-dark .dialog-close,
+.layout-shell.theme-dark .dialog-ghost-action,
 .layout-shell.theme-dark .quick-action-btn,
 .layout-shell.theme-dark .primary-action,
 .layout-shell.theme-dark .secondary-action,
@@ -393,6 +452,51 @@ export default {
   flex-direction: column;
   gap: 0.6rem;
   padding-right: 0.1rem;
+}
+
+.floating-status {
+  align-self: center;
+  max-width: calc(100% - 3rem);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.16rem 0.55rem;
+  margin: -0.1rem auto 0.05rem;
+  border-radius: 999px;
+  background: rgba(248, 250, 252, 0.72);
+  border: 1px solid rgba(148, 163, 184, 0.14);
+  backdrop-filter: blur(12px);
+  pointer-events: none;
+}
+
+.layout-shell.theme-dark .floating-status {
+  background: rgba(15, 23, 42, 0.72);
+  border-color: rgba(148, 163, 184, 0.14);
+}
+
+.floating-status-dot {
+  width: 0.38rem;
+  height: 0.38rem;
+  flex: 0 0 auto;
+  border-radius: 999px;
+  background: linear-gradient(135deg, #14b8a6, #0ea5e9);
+  opacity: 0.9;
+  animation: floating-status-pulse 1.2s ease-in-out infinite;
+}
+
+.floating-status-text {
+  display: block;
+  font-size: 0.68rem;
+  line-height: 1.2;
+  color: #64748b;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.layout-shell.theme-dark .floating-status-text {
+  color: #94a3b8;
 }
 
 .empty-chat {
@@ -437,6 +541,16 @@ export default {
   background: linear-gradient(135deg, rgba(20, 184, 166, 0.16), rgba(14, 165, 233, 0.14));
 }
 
+.message-card.role-system {
+  align-self: center;
+  max-width: 78%;
+  padding: 0.26rem 0.6rem;
+  border-radius: 999px;
+  border: 0;
+  background: rgba(148, 163, 184, 0.1);
+  box-shadow: none;
+}
+
 .message-card.role-assistant {
   align-self: flex-start;
   background: rgba(255, 255, 255, 0.84);
@@ -444,6 +558,10 @@ export default {
 
 .layout-shell.theme-dark .message-card.role-user {
   background: linear-gradient(135deg, rgba(20, 184, 166, 0.2), rgba(14, 165, 233, 0.18));
+}
+
+.layout-shell.theme-dark .message-card.role-system {
+  background: rgba(51, 65, 85, 0.72);
 }
 
 .layout-shell.theme-dark .message-card.role-assistant {
@@ -463,6 +581,24 @@ export default {
   font-size: 0.86rem;
   line-height: 1.58;
   color: #1e293b;
+}
+
+.message-card.role-system .message-content {
+  margin-top: 0;
+  font-size: 0.72rem;
+  line-height: 1.35;
+  color: #64748b;
+  text-align: center;
+}
+
+.message-card.role-system .message-meta {
+  justify-content: center;
+  gap: 0.35rem;
+}
+
+.message-card.role-system .message-status {
+  font-size: 0.66rem;
+  color: #94a3b8;
 }
 
 .suggestion-list {
@@ -520,6 +656,19 @@ export default {
   transform: translateY(12px) scale(0.98);
 }
 
+@keyframes floating-status-pulse {
+  0%,
+  100% {
+    opacity: 0.45;
+    transform: scale(0.92);
+  }
+
+  50% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
 @media (max-width: 768px) {
   .page-agent-dialog {
     right: 12px;
@@ -527,6 +676,10 @@ export default {
     bottom: 12px;
     width: auto;
     height: min(82vh, 760px);
+  }
+
+  .floating-status {
+    max-width: calc(100% - 1.5rem);
   }
 }
 </style>

@@ -17,6 +17,12 @@ const createInitialAssistantMessage = (context) => createMessage(
   { suggestions: [] }
 );
 
+const createStatusMessage = (content) => createMessage('system', content, {
+  pending: true,
+});
+
+const createFreshMessages = (context) => (context ? [createInitialAssistantMessage(context)] : []);
+
 const syncSession = (state) => {
   const scopeKey = state.activeScopeKey;
   if (!scopeKey) {
@@ -99,6 +105,27 @@ const mutations = {
   SET_REQUEST_CONTROLLER(state, controller) {
     state.requestController = controller;
   },
+  CLEAR_SESSION(state, scopeKey) {
+    if (!scopeKey) {
+      state.messages = createFreshMessages(state.currentContext);
+      state.draft = '';
+      syncSession(state);
+      return;
+    }
+
+    const nextMessages = createFreshMessages(state.currentContext);
+    state.sessions = {
+      ...state.sessions,
+      [scopeKey]: {
+        messages: nextMessages,
+      },
+    };
+
+    if (state.activeScopeKey === scopeKey) {
+      state.messages = nextMessages;
+      state.draft = '';
+    }
+  },
 };
 
 const buildRouteParams = (context) => {
@@ -172,9 +199,7 @@ const actions = {
     commit('SET_DRAFT', '');
     commit('SET_STREAMING', true);
 
-    const pendingMessage = createMessage('assistant', '正在整理当前页面上下文...', {
-      pending: true,
-    });
+    const pendingMessage = createStatusMessage('正在整理当前页面上下文...');
     commit('ADD_MESSAGE', pendingMessage);
 
     try {
@@ -207,9 +232,14 @@ const actions = {
             commit('REPLACE_LAST_MESSAGE', createMessage('assistant', assembledText, {
               suggestions: [...suggestions],
             }));
+          } else if (event.type === 'status') {
+            if (!assembledText) {
+              commit('REPLACE_LAST_MESSAGE', createStatusMessage(event.status || '正在处理中...'));
+            }
           } else if (event.type === 'ui_intent') {
             suggestions.push(createSuggestionFromIntent(event));
             commit('REPLACE_LAST_MESSAGE', createMessage('assistant', assembledText || '我已整理出可执行动作。', {
+              pending: !assembledText,
               suggestions: [...suggestions],
             }));
           } else if (event.type === 'error') {
@@ -275,6 +305,37 @@ const actions = {
     } finally {
       commit('SET_STREAMING', false);
       commit('SET_REQUEST_CONTROLLER', null);
+    }
+  },
+  async clearSession({ commit, state, dispatch }) {
+    if (!state.activeScopeKey) {
+      commit('CLEAR_SESSION', '');
+      return;
+    }
+
+    if (state.streaming) {
+      await dispatch('abort');
+    }
+
+    try {
+      await agentService.clear(state.activeScopeKey);
+    } catch (error) {
+      console.error('Failed to clear agent session:', error);
+    } finally {
+      commit('CLEAR_SESSION', state.activeScopeKey);
+      if (state.currentContext) {
+        try {
+          await agentService.initSession({
+            scope_key: state.activeScopeKey,
+            route_name: state.currentContext?.meta?.routeName || '',
+            route_params: buildRouteParams(state.currentContext),
+            ui_context: buildUiContext(state.currentContext),
+          });
+          commit('SET_SCOPE_INITIALIZED', state.activeScopeKey);
+        } catch (error) {
+          console.error('Failed to re-init agent session after clear:', error);
+        }
+      }
     }
   },
 };
