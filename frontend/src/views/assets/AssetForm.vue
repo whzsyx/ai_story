@@ -72,23 +72,6 @@
               </select>
             </label>
 
-            <label class="field-block">
-              <span class="field-label">作用域 <span class="text-error">*</span></span>
-              <select
-                v-model="form.scope"
-                class="field-input"
-                :disabled="!isAdmin && form.scope === 'system'"
-              >
-                <option value="user">用户级（仅自己可见）</option>
-                <option
-                  value="system"
-                  :disabled="!isAdmin"
-                >
-                  系统级（所有用户可见，需管理员权限）
-                </option>
-              </select>
-            </label>
-
             <div class="field-block">
               <span class="field-label">分组</span>
               <div class="inline-field-group">
@@ -306,15 +289,6 @@
 
         <section class="content-card form-card footer-card">
           <div class="footer-controls">
-            <label class="toggle-line">
-              <input
-                v-model="form.is_active"
-                type="checkbox"
-                class="checkbox checkbox-primary"
-              >
-              <span>激活此资产</span>
-            </label>
-
             <div class="submit-actions">
               <button
                 type="button"
@@ -415,9 +389,6 @@ export default {
     },
     assetId() {
       return this.$route.params.id;
-    },
-    isAdmin() {
-      return this.$store.getters['auth/isAdmin'];
     },
     currentImageUrl() {
       if (this.generatedPreview && this.generatedPreview.url) {
@@ -702,10 +673,6 @@ export default {
       const valueValid = this.validateValue();
 
       if (!keyValid || !valueValid) {
-        return;
-      }
-
-      if (this.form.scope === 'system' && !this.isAdmin) {
         return;
       }
 
