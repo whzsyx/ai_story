@@ -197,6 +197,8 @@
       <footer class="layout-footer">
         <p>© {{ currentYear }} AI Story xhongc 版权所有</p>
       </footer>
+
+      <PageAgentLauncher />
     </div>
 
     <!-- 移动端侧边栏 -->
@@ -397,9 +399,13 @@
 
 <script>
 import { mapGetters, mapActions } from 'vuex';
+import PageAgentLauncher from '@/components/assistant/PageAgentLauncher.vue';
 
 export default {
   name: 'Layout',
+  components: {
+    PageAgentLauncher,
+  },
   computed: {
     ...mapGetters('auth', ['username', 'user']),
     ...mapGetters('ui', ['sidebarCollapsed', 'topbarCollapsed', 'isDark']),

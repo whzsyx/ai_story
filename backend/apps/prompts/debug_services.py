@@ -4,11 +4,18 @@
 """
 
 import asyncio
+import base64
+import copy
 import inspect
+import mimetypes
+import re
 import time
-from typing import Any, Dict, Generator, Optional
+from typing import Any, Dict, Generator, Optional, Tuple
 
+import requests
+from django.conf import settings
 from django.db import transaction
+from django.db.models import Q
 from django.utils import timezone
 from jinja2 import Template, TemplateError
 
@@ -27,6 +34,8 @@ from .models import (
 
 class PromptDebugService:
     """提示词调试核心服务"""
+
+    IMAGE_ASSET_TOKEN_PATTERN = re.compile(r'__IMAGE_ASSET_(\d+)__')
 
     STAGE_PROVIDER_TYPE_MAP = {
         'rewrite': 'llm',
@@ -121,6 +130,175 @@ class PromptDebugService:
         jinja_template = Template(template_content)
         return jinja_template.render(**context)
 
+    @classmethod
+    def _get_accessible_image_assets(cls, user) -> Dict[str, GlobalVariable]:
+        assets = {}
+        queryset = GlobalVariable.objects.filter(
+            Q(created_by=user, scope='user', is_active=True, variable_type='image')
+            | Q(scope='system', is_active=True, variable_type='image')
+        ).order_by('scope', 'group', 'key')
+        for asset in queryset:
+            assets.setdefault(asset.key, asset)
+        return assets
+
+    @classmethod
+    def _build_image_asset_tokens(cls, image_assets: Dict[str, GlobalVariable]) -> Dict[str, str]:
+        return {
+            asset_key: '__IMAGE_ASSET_{}__'.format(index)
+            for index, asset_key in enumerate(image_assets.keys(), 1)
+        }
+
+    @classmethod
+    def _inject_image_asset_tokens(
+        cls,
+        template_vars: Dict[str, Any],
+        token_map: Dict[str, str],
+    ) -> Dict[str, Any]:
+        injected_vars = copy.deepcopy(template_vars)
+        for asset_key, token in token_map.items():
+            if asset_key in injected_vars:
+                injected_vars[asset_key] = token
+        return injected_vars
+
+    @classmethod
+    def _render_template_recursively(
+        cls,
+        template_content: str,
+        template_vars: Dict[str, Any],
+        max_passes: int = 3,
+    ) -> str:
+        rendered = template_content
+        for _ in range(max_passes):
+            next_rendered = Template(rendered).render(**template_vars)
+            if next_rendered == rendered:
+                return next_rendered
+            rendered = next_rendered
+            if '{{' not in rendered and '{%' not in rendered:
+                return rendered
+        return rendered
+
+    @classmethod
+    def _guess_image_mime_type(cls, filename: str = '', image_bytes: bytes = b'') -> str:
+        if filename:
+            guessed_type, _ = mimetypes.guess_type(filename)
+            if guessed_type and guessed_type.startswith('image/'):
+                return guessed_type.lower()
+
+        if image_bytes.startswith(b'\xFF\xD8\xFF'):
+            return 'image/jpeg'
+        if image_bytes.startswith(b'\x89PNG\r\n\x1a\n'):
+            return 'image/png'
+        if image_bytes.startswith((b'GIF87a', b'GIF89a')):
+            return 'image/gif'
+        if image_bytes.startswith(b'RIFF') and b'WEBP' in image_bytes[:16]:
+            return 'image/webp'
+        if image_bytes.startswith(b'BM'):
+            return 'image/bmp'
+        if image_bytes.lstrip().startswith(b'<svg'):
+            return 'image/svg+xml'
+
+        return 'image/png'
+
+    @classmethod
+    def _read_image_asset_bytes(cls, asset: GlobalVariable) -> Tuple[bytes, str]:
+        data_uri = (asset.value or '').strip()
+        if data_uri.startswith('data:image/') and ';base64,' in data_uri:
+            header, encoded = data_uri.split(';base64,', 1)
+            return base64.b64decode(encoded), header[5:].lower()
+
+        if asset.image_file:
+            image_bytes = asset.image_file.read()
+            asset.image_file.seek(0)
+            return image_bytes, cls._guess_image_mime_type(asset.image_file.name, image_bytes)
+
+        source = str(asset.get_typed_value() or asset.value or '').strip()
+        if not source:
+            raise ValueError('图片资产 {} 缺少可用图片内容'.format(asset.key))
+
+        if source.startswith('/api/v1/content/storage/image/'):
+            relative_path = source.split('/api/v1/content/storage/image/', 1)[1]
+            image_path = settings.STORAGE_ROOT / 'image' / relative_path
+            image_bytes = image_path.read_bytes()
+            return image_bytes, cls._guess_image_mime_type(image_path.name, image_bytes)
+
+        normalized_media_url = '/{}/'.format(str(settings.MEDIA_URL).strip('/'))
+        if source.startswith(normalized_media_url) or source.startswith(str(settings.MEDIA_URL)):
+            relative_path = source.split(str(settings.MEDIA_URL).strip('/'), 1)[-1].lstrip('/')
+            image_path = settings.MEDIA_ROOT / relative_path
+            image_bytes = image_path.read_bytes()
+            return image_bytes, cls._guess_image_mime_type(image_path.name, image_bytes)
+
+        response = requests.get(source, timeout=30)
+        response.raise_for_status()
+        image_bytes = response.content
+        content_type = response.headers.get('Content-Type', '').split(';', 1)[0].strip().lower()
+        mime_type = content_type if content_type.startswith('image/') else cls._guess_image_mime_type(source, image_bytes)
+        return image_bytes, mime_type
+
+    @classmethod
+    def _image_asset_to_data_uri(cls, asset: GlobalVariable) -> str:
+        raw_value = str(asset.value or '').strip()
+        if raw_value.startswith('data:image/') and ';base64,' in raw_value:
+            return raw_value
+
+        image_bytes, mime_type = cls._read_image_asset_bytes(asset)
+        encoded = base64.b64encode(image_bytes).decode('utf-8')
+        return 'data:{};base64,{}'.format(mime_type.lower(), encoded)
+
+    @classmethod
+    def _replace_image_asset_tokens(
+        cls,
+        rendered_prompt: str,
+        image_assets: Dict[str, GlobalVariable],
+        token_map: Dict[str, str],
+    ) -> Dict[str, Any]:
+        ordered_tokens = []
+        seen_tokens = set()
+
+        for match in cls.IMAGE_ASSET_TOKEN_PATTERN.finditer(rendered_prompt):
+            token = match.group(0)
+            if token in seen_tokens:
+                continue
+            seen_tokens.add(token)
+            ordered_tokens.append(token)
+
+        if not ordered_tokens:
+            return {
+                'prompt': rendered_prompt,
+                'image': [],
+            }
+
+        token_to_asset = {
+            token: image_assets[asset_key]
+            for asset_key, token in token_map.items()
+        }
+        token_to_label = {
+            token: '图{}'.format(index)
+            for index, token in enumerate(ordered_tokens, 1)
+        }
+
+        final_prompt = rendered_prompt
+        for token, label in token_to_label.items():
+            final_prompt = final_prompt.replace(token, label)
+
+        return {
+            'prompt': final_prompt,
+            'image': [cls._image_asset_to_data_uri(token_to_asset[token]) for token in ordered_tokens],
+        }
+
+    @classmethod
+    def _prepare_text2image_prompt(
+        cls,
+        template_content: str,
+        context: Dict[str, Any],
+        user,
+    ) -> Dict[str, Any]:
+        image_assets = cls._get_accessible_image_assets(user)
+        token_map = cls._build_image_asset_tokens(image_assets)
+        injected_context = cls._inject_image_asset_tokens(context, token_map)
+        rendered_prompt = cls._render_template_recursively(template_content, injected_context)
+        return cls._replace_image_asset_tokens(rendered_prompt, image_assets, token_map)
+
 
     @classmethod
     def build_llm_user_prompt(
@@ -185,12 +363,14 @@ class PromptDebugService:
         provider: ModelProvider,
         rendered_prompt: str,
         input_payload: Dict[str, Any],
+        input_images: Optional[list] = None,
     ) -> Dict[str, Any]:
         start_time = time.time()
         client = create_ai_client(provider)
         extra_config = provider.extra_config or {}
         response = client.generate(
             prompt=rendered_prompt,
+            image=input_images or [],
             negative_prompt=input_payload.get('negative_prompt', extra_config.get('negative_prompt', '')),
             width=input_payload.get('width', extra_config.get('width', 1024)),
             height=input_payload.get('height', extra_config.get('height', 1024)),
@@ -429,7 +609,13 @@ class PromptDebugService:
         )
 
         try:
-            rendered_prompt = cls.render_prompt(template_content, context)
+            if session.stage_type in ('image_generation', 'multi_grid_image'):
+                prompt_payload = cls._prepare_text2image_prompt(template_content, context, user)
+                rendered_prompt = prompt_payload['prompt']
+                input_images = prompt_payload['image']
+            else:
+                rendered_prompt = cls.render_prompt(template_content, context)
+                input_images = []
         except TemplateError as exc:
             raise ValueError(f'模板渲染失败: {exc}')
 
@@ -438,6 +624,7 @@ class PromptDebugService:
             'source_artifact': source_artifact,
             'resolved_variables': context,
             'rendered_prompt': rendered_prompt,
+            'input_images': input_images,
         }
 
     @classmethod
@@ -536,6 +723,7 @@ class PromptDebugService:
         source_artifact = prepared['source_artifact']
         resolved_variables = prepared['resolved_variables']
         rendered_prompt = prepared['rendered_prompt']
+        input_images = prepared.get('input_images', [])
         run = cls.create_run_record(
             session=session,
             provider=provider,
@@ -670,6 +858,7 @@ class PromptDebugService:
         provider = prepared['provider']
         context = prepared['resolved_variables']
         rendered_prompt = prepared['rendered_prompt']
+        input_images = prepared.get('input_images', [])
 
         run = cls.create_run_record(
             session=session,
@@ -686,7 +875,7 @@ class PromptDebugService:
             result = cls._run_llm(provider, rendered_prompt)
             parsed_output = cls.parse_output(session.stage_type, result['raw_text'])
         elif session.stage_type in ('image_generation', 'multi_grid_image'):
-            result = cls._run_text2image(provider, rendered_prompt, input_payload or {})
+            result = cls._run_text2image(provider, rendered_prompt, input_payload or {}, input_images=input_images)
             parsed_output = result['parsed_output']
         elif session.stage_type == 'video_generation':
             result = cls._run_image2video(provider, rendered_prompt, input_payload or {})

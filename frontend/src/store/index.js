@@ -7,6 +7,7 @@ import prompts from './modules/prompts';
 import models from './modules/models';
 import content from './modules/content';
 import ui from './modules/ui';
+import assistant from './modules/assistant';
 
 Vue.use(Vuex);
 
@@ -38,5 +39,6 @@ export default new Vuex.Store({
     models,
     content,
     ui,
+    assistant,
   },
 });
