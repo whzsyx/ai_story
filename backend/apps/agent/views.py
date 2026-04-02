@@ -11,9 +11,13 @@ from rest_framework_simplejwt.tokens import AccessToken
 
 from apps.models.models import ModelProvider
 from apps.models.opencode_config import OpencodeConfigSyncService
+from apps.users.models import UserPreference
 from .services.context_builder import AgentContextBuilder
 from .services.gateway import AgentGateway
 from .services.session_manager import AgentSessionManager
+
+
+ASSISTANT_MODEL_PREFERENCE_KEY = 'assistant_model_provider_id'
 
 
 class AgentStreamAuthMixin:
@@ -41,6 +45,8 @@ class AgentSessionInitView(APIView):
         route_params = request.data.get('route_params') or {}
         ui_context = request.data.get('ui_context') or {}
         selected_model_provider_id = (request.data.get('selected_model_provider_id') or '').strip()
+        if not selected_model_provider_id:
+            selected_model_provider_id = self._get_persisted_model_provider_id(request.user)
 
         if not scope_key:
             return Response({'error': '缺少 scope_key'}, status=status.HTTP_400_BAD_REQUEST)
@@ -68,6 +74,14 @@ class AgentSessionInitView(APIView):
             'selected_model_provider_id': selected_model_provider_id,
             'stream_url': f'/api/v1/agent/session/{scope_key}/stream/',
         })
+
+    @staticmethod
+    def _get_persisted_model_provider_id(user):
+        preference = UserPreference.objects.filter(
+            user=user,
+            key=ASSISTANT_MODEL_PREFERENCE_KEY,
+        ).first()
+        return (preference.value if preference else '') or ''
 
 
 class AgentSessionMessageView(APIView):
@@ -244,8 +258,10 @@ class AgentModelListView(APIView):
         ).order_by('-priority', '-created_at')
         queryset = [item for item in queryset if OpencodeConfigSyncService.is_supported_provider(item)]
 
+        selected_model_provider_id = AgentSessionInitView._get_persisted_model_provider_id(request.user)
         return Response({
             'count': len(queryset),
+            'selected_model_provider_id': selected_model_provider_id,
             'results': [
                 {
                     'id': str(item.id),
@@ -256,3 +272,23 @@ class AgentModelListView(APIView):
                 for item in queryset
             ],
         })
+
+    def post(self, request):
+        selected_model_provider_id = (request.data.get('selected_model_provider_id') or '').strip()
+        if not selected_model_provider_id:
+            return Response({'error': '缺少 selected_model_provider_id'}, status=status.HTTP_400_BAD_REQUEST)
+
+        provider = ModelProvider.objects.filter(
+            id=selected_model_provider_id,
+            provider_type='llm',
+            is_active=True,
+        ).first()
+        if not provider or not OpencodeConfigSyncService.is_supported_provider(provider):
+            return Response({'error': '所选助手模型不可用'}, status=status.HTTP_400_BAD_REQUEST)
+
+        UserPreference.objects.update_or_create(
+            user=request.user,
+            key=ASSISTANT_MODEL_PREFERENCE_KEY,
+            defaults={'value': selected_model_provider_id},
+        )
+        return Response({'accepted': True, 'selected_model_provider_id': selected_model_provider_id})

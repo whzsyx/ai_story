@@ -7,6 +7,30 @@ from apps.models.services import ModelProviderService
 from core.ai_client.base import AIResponse
 
 
+class ModelProviderServiceLLMTestCase(TestCase):
+    def test_llm_provider_returns_error_field_when_stream_fails(self):
+        provider = ModelProvider(
+            name='OpenAI Test',
+            provider_type='llm',
+            api_url='http://localhost:8000/v1/chat/completions',
+            api_key='secret',
+            model_name='gpt-test',
+            max_tokens=512,
+            temperature=0.7,
+            timeout=30,
+        )
+
+        with patch(
+            'core.ai_client.openai_client.OpenAIClient.generate_stream',
+            return_value=iter([{'type': 'error', 'error': 'API请求失败: 401 - invalid api key'}])
+        ):
+            result = ModelProviderService._test_llm_provider(provider, 'hello')
+
+        self.assertFalse(result['success'])
+        self.assertEqual(result['error'], 'API请求失败: 401 - invalid api key')
+        self.assertEqual(result['text'], 'API请求失败: 401 - invalid api key')
+
+
 class ModelProviderServiceImage2VideoTestCase(TestCase):
     async def test_image2video_provider_uses_comfyui_executor(self):
         provider = ModelProvider(

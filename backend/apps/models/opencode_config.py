@@ -109,8 +109,10 @@ class OpencodeConfigSyncService:
         model_entry = {
             'name': provider.model_name,
             'limit': {
-                'context': int(context_limit or provider.max_tokens or 0),
-                'output': int(provider.max_tokens or 0),
+                'context': 409600,
+                # 'context': int(context_limit or provider.max_tokens or 0),
+                'output': 128000,
+                # 'output': int(provider.max_tokens or 0),
             },
         }
 

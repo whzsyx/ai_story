@@ -774,12 +774,15 @@ class ModelProviderService:
         )
         full_text = ""
         is_success = False
+        error_message = None
         for chunk in client.generate_stream(prompt):
             if chunk.get("type") == "done":
                 full_text = chunk.get("full_text")
                 is_success = True
             elif chunk.get("type") == "error":
-                full_text = chunk.get("error")
+                error_message = chunk.get("error") or 'LLM 提供商测试失败'
+                if not full_text:
+                    full_text = error_message
                 is_success = False
         return {
             'success': is_success,
@@ -788,7 +791,8 @@ class ModelProviderService:
                 'prompt': prompt,
                 'provider': provider.name
             },
-            'tokens_used': 0
+            'tokens_used': 0,
+            'error': error_message,
         }
 
     @staticmethod

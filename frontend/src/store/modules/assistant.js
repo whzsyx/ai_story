@@ -360,6 +360,14 @@ const actions = {
       const response = await agentService.getModels();
       const models = response.results || [];
       commit('SET_AVAILABLE_MODELS', models);
+      const persistedProviderId = response.selected_model_provider_id || '';
+
+      if (persistedProviderId && models.some((item) => item.id === persistedProviderId)) {
+        commit('SET_SELECTED_MODEL_PROVIDER_ID', persistedProviderId);
+      } else if (!state.selectedModelProviderId && models.length) {
+        commit('SET_SELECTED_MODEL_PROVIDER_ID', models[0].id);
+      }
+
       return models;
     } catch (error) {
       console.error('Failed to fetch assistant models:', error);
@@ -375,6 +383,14 @@ const actions = {
     }
 
     commit('SET_SELECTED_MODEL_PROVIDER_ID', providerId);
+
+    try {
+      await agentService.updateSelectedModel({
+        selected_model_provider_id: providerId,
+      });
+    } catch (error) {
+      console.error('Failed to persist selected assistant model:', error);
+    }
 
     try {
       await agentService.initSession({

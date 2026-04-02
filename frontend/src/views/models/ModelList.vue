@@ -332,7 +332,9 @@ export default {
         }
       } catch (error) {
         console.error('测试连接失败:', error)
-        await this.$alert('测试连接失败', '测试结果', { tone: 'error' })
+        const backendError = error?.response?.data?.error
+        const backendMessage = error?.response?.data?.message
+        await this.$alert(backendError || backendMessage || '测试连接失败', '测试结果', { tone: 'error' })
       } finally {
         this.testingProviderId = null
       }

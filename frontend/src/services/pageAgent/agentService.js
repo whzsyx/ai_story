@@ -42,6 +42,10 @@ export default {
     return agentApi.getModels();
   },
 
+  updateSelectedModel(payload) {
+    return agentApi.updateSelectedModel(payload);
+  },
+
   initSession(payload) {
     return agentApi.initSession(payload);
   },

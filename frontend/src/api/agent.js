@@ -20,6 +20,10 @@ export default {
     return apiClient.get('/agent/models/');
   },
 
+  updateSelectedModel(data) {
+    return apiClient.post('/agent/models/', data);
+  },
+
   sendMessage(scopeKey, data) {
     return apiClient.post(`/agent/session/${encodeURIComponent(scopeKey)}/message/`, data);
   },
