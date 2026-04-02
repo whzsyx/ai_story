@@ -191,14 +191,14 @@ class AgentGatewayTestCase(TestCase):
         gateway = AgentGateway()
         response = Mock()
         response.iter_lines.return_value = iter([
-            b'data: {"type":"server.connected","properties":{}}',
+            b'data: {"type":"token","content":"\u63d0\u95ee"}',
             b'',
         ])
 
         events = list(gateway._iter_sse_events(response))
 
         self.assertEqual(events, [
-            {'type': 'server.connected', 'properties': {}},
+            {'type': 'token', 'content': '提问'},
         ])
 
     def test_iter_sse_events_ignores_read_timeout_connection_error(self):

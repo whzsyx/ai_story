@@ -426,7 +426,13 @@ class AgentGateway:
     def _iter_sse_events(self, response):
         event_lines = []
         try:
-            for raw_line in response.iter_lines(chunk_size=1, decode_unicode=True):
+            for raw_line in response.iter_lines(chunk_size=1, decode_unicode=False):
+                if raw_line is None:
+                    continue
+
+                if isinstance(raw_line, bytes):
+                    raw_line = raw_line.decode('utf-8', errors='replace')
+
                 if raw_line == '':
                     payload = self._parse_sse_event_lines(event_lines)
                     event_lines = []
@@ -434,8 +440,6 @@ class AgentGateway:
                         yield payload
                     continue
 
-                if raw_line is None:
-                    continue
                 event_lines.append(raw_line)
         except requests.exceptions.ReadTimeout:
             return
