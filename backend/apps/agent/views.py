@@ -12,12 +12,46 @@ from rest_framework_simplejwt.tokens import AccessToken
 from apps.models.models import ModelProvider
 from apps.models.opencode_config import OpencodeConfigSyncService
 from apps.users.models import UserPreference
+from .services.builtin_models import BuiltinAgentModelRegistry
 from .services.context_builder import AgentContextBuilder
 from .services.gateway import AgentGateway
 from .services.session_manager import AgentSessionManager
 
 
 ASSISTANT_MODEL_PREFERENCE_KEY = 'assistant_model_provider_id'
+
+
+def _is_supported_assistant_model(provider_id, require_opencode_support=False):
+    normalized_provider_id = (provider_id or '').strip()
+    if not normalized_provider_id:
+        return True
+
+    if BuiltinAgentModelRegistry.is_valid_selection(normalized_provider_id):
+        return True
+
+    provider = ModelProvider.objects.filter(
+        id=normalized_provider_id,
+        provider_type='llm',
+        is_active=True,
+    ).first()
+    if not provider:
+        return False
+
+    if require_opencode_support and not OpencodeConfigSyncService.is_supported_provider(provider):
+        return False
+    return True
+
+
+def _normalize_assistant_model_provider_id(provider_id, require_opencode_support=False):
+    normalized_provider_id = (provider_id or '').strip()
+    if not normalized_provider_id:
+        return ''
+    if _is_supported_assistant_model(
+        normalized_provider_id,
+        require_opencode_support=require_opencode_support,
+    ):
+        return normalized_provider_id
+    return ''
 
 
 class AgentStreamAuthMixin:
@@ -51,11 +85,7 @@ class AgentSessionInitView(APIView):
         if not scope_key:
             return Response({'error': '缺少 scope_key'}, status=status.HTTP_400_BAD_REQUEST)
 
-        if selected_model_provider_id and not ModelProvider.objects.filter(
-            id=selected_model_provider_id,
-            provider_type='llm',
-            is_active=True,
-        ).exists():
+        if not _is_supported_assistant_model(selected_model_provider_id):
             return Response({'error': '所选助手模型不可用'}, status=status.HTTP_400_BAD_REQUEST)
 
         manager = AgentSessionManager()
@@ -81,7 +111,7 @@ class AgentSessionInitView(APIView):
             user=user,
             key=ASSISTANT_MODEL_PREFERENCE_KEY,
         ).first()
-        return (preference.value if preference else '') or ''
+        return _normalize_assistant_model_provider_id(preference.value if preference else '')
 
 
 class AgentSessionMessageView(APIView):
@@ -94,11 +124,7 @@ class AgentSessionMessageView(APIView):
         if not text:
             return Response({'error': '缺少 text'}, status=status.HTTP_400_BAD_REQUEST)
 
-        if selected_model_provider_id and not ModelProvider.objects.filter(
-            id=selected_model_provider_id,
-            provider_type='llm',
-            is_active=True,
-        ).exists():
+        if not _is_supported_assistant_model(selected_model_provider_id):
             return Response({'error': '所选助手模型不可用'}, status=status.HTTP_400_BAD_REQUEST)
 
         manager = AgentSessionManager()
@@ -258,9 +284,10 @@ class AgentModelListView(APIView):
         ).order_by('-priority', '-created_at')
         queryset = [item for item in queryset if OpencodeConfigSyncService.is_supported_provider(item)]
 
+        builtin_models = BuiltinAgentModelRegistry.list_models()
         selected_model_provider_id = AgentSessionInitView._get_persisted_model_provider_id(request.user)
         return Response({
-            'count': len(queryset),
+            'count': len(queryset) + len(builtin_models),
             'selected_model_provider_id': selected_model_provider_id,
             'results': [
                 {
@@ -270,7 +297,7 @@ class AgentModelListView(APIView):
                     'api_url': item.api_url,
                 }
                 for item in queryset
-            ],
+            ] + builtin_models,
         })
 
     def post(self, request):
@@ -278,12 +305,7 @@ class AgentModelListView(APIView):
         if not selected_model_provider_id:
             return Response({'error': '缺少 selected_model_provider_id'}, status=status.HTTP_400_BAD_REQUEST)
 
-        provider = ModelProvider.objects.filter(
-            id=selected_model_provider_id,
-            provider_type='llm',
-            is_active=True,
-        ).first()
-        if not provider or not OpencodeConfigSyncService.is_supported_provider(provider):
+        if not _is_supported_assistant_model(selected_model_provider_id, require_opencode_support=True):
             return Response({'error': '所选助手模型不可用'}, status=status.HTTP_400_BAD_REQUEST)
 
         UserPreference.objects.update_or_create(

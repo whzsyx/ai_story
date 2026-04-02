@@ -154,6 +154,7 @@ AGENT_MODEL_PROVIDER_ID = os.getenv('AGENT_MODEL_PROVIDER_ID', 'opencode').strip
 AGENT_MODEL_ID = os.getenv('AGENT_MODEL_ID', 'big-pickle').strip()
 AGENT_MODEL_VARIANT = os.getenv('AGENT_MODEL_VARIANT', '').strip()
 AGENT_REMOTE_AGENT_NAME = os.getenv('AGENT_REMOTE_AGENT_NAME', 'build').strip()
+AGENT_SHOW_FREE_MODELS = os.getenv('AGENT_SHOW_FREE_MODELS', 'false').strip()
 OPENCODE_CONFIG_FILE = os.getenv('OPENCODE_CONFIG_FILE', str(Path.home() / '.config' / 'opencode' / 'opencode.json')).strip()
 OPENCODE_MANAGED_PROVIDER_PREFIX = os.getenv('OPENCODE_MANAGED_PROVIDER_PREFIX', 'django').strip()
 OPENCODE_DEFAULT_PROVIDER_NPM = os.getenv('OPENCODE_DEFAULT_PROVIDER_NPM', '@ai-sdk/openai-compatible').strip()

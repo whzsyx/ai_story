@@ -7,6 +7,7 @@ from django.conf import settings
 
 from apps.models.models import ModelProvider
 from apps.models.opencode_config import OpencodeConfigSyncService
+from .builtin_models import BuiltinAgentModelRegistry
 from .local_agent import LocalAgentResponder
 
 
@@ -103,6 +104,14 @@ class AgentGateway:
 
     def _resolve_model_target(self, selected_model_provider_id=''):
         if selected_model_provider_id:
+            builtin_model = BuiltinAgentModelRegistry.get_model(selected_model_provider_id)
+            if builtin_model:
+                return {
+                    'provider_id': builtin_model['provider_id'],
+                    'model_id': builtin_model['model_id'],
+                    'variant': builtin_model.get('variant') or '',
+                }
+
             provider = ModelProvider.objects.filter(
                 id=selected_model_provider_id,
                 provider_type='llm',

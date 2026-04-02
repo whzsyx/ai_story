@@ -1,5 +1,30 @@
 opencode serve 命令运行一个无界面的 HTTP 服务器，暴露一个 OpenAPI 端点供 opencode 客户端使用。
 
+
+AI Story 页面助手补充配置
+AI Story 后端当前还依赖以下环境变量连接本地或远端 opencode serve：
+
+- AGENT_SERVER_BASE_URL：opencode serve 地址，默认 http://127.0.0.1:9002
+- AGENT_SERVER_USERNAME：HTTP Basic Auth 用户名，默认 opencode
+- AGENT_SERVER_PASSWORD：HTTP Basic Auth 密码
+- AGENT_MODEL_PROVIDER_ID：未显式选择时的默认 provider，默认 opencode
+- AGENT_MODEL_ID：未显式选择时的默认模型，默认 big-pickle
+- AGENT_MODEL_VARIANT：默认模型变体，可留空
+- AGENT_REMOTE_AGENT_NAME：远端 agent 名称，默认 build
+- AGENT_SHOW_FREE_MODELS：是否在页面助手模型列表中显示内置免费模型，默认 false
+
+当 AGENT_SHOW_FREE_MODELS=true 时，页面助手会额外展示以下内置免费模型：
+
+- Big Pickle
+- MiMo V2 Pro Free
+- MiMo V2 Omni Free
+- Qwen3.6 Plus Free
+- Nemotron 3 Super Free
+- MiniMax M2.5 Free
+
+这些模型展示在 AI Story 的 `/api/v1/agent/models/` 接口中，并通过 opencode 的 providerID/modelID 直接调用，不依赖 Django 数据库中的 ModelProvider 记录。
+
+
 用法
 Terminal window
 opencode serve [--port <number>] [--hostname <string>] [--cors <origin>]
