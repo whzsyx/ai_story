@@ -34,7 +34,7 @@ class AgentSessionManager:
         self.save_session(user_id, scope_key, session)
         return session
 
-    def init_session(self, user_id, scope_key, route_name='', route_params=None, ui_context=None):
+    def init_session(self, user_id, scope_key, route_name='', route_params=None, ui_context=None, selected_model_provider_id=''):
         existing = self.get_session(user_id, scope_key)
         created = False
 
@@ -44,6 +44,7 @@ class AgentSessionManager:
                 'route_name': route_name or '',
                 'route_params': route_params or {},
                 'ui_context': ui_context or {},
+                'selected_model_provider_id': selected_model_provider_id or '',
                 'messages': [],
                 'created_at': timezone.now().isoformat(),
                 'updated_at': timezone.now().isoformat(),
@@ -54,6 +55,7 @@ class AgentSessionManager:
             existing['route_name'] = route_name or existing.get('route_name', '')
             existing['route_params'] = route_params or existing.get('route_params', {})
             existing['ui_context'] = ui_context or existing.get('ui_context', {})
+            existing['selected_model_provider_id'] = selected_model_provider_id or existing.get('selected_model_provider_id', '')
             existing['updated_at'] = timezone.now().isoformat()
 
         self.save_session(user_id, scope_key, existing)

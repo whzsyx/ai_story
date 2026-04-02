@@ -19,6 +19,60 @@
             </p>
           </div>
           <div class="dialog-header-actions">
+            <div
+              v-if="models.length"
+              class="model-switcher"
+            >
+              <button
+                class="dialog-icon-action"
+                type="button"
+                :disabled="streaming"
+                :title="currentModelLabel"
+                @click="toggleModelMenu"
+              >
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  xmlns="http://www.w3.org/2000/svg"
+                  aria-hidden="true"
+                >
+                  <path
+                    d="M12 4L19 8L12 12L5 8L12 4Z"
+                    stroke="currentColor"
+                    stroke-width="1.5"
+                    stroke-linejoin="round"
+                  />
+                  <path
+                    d="M5 12L12 16L19 12"
+                    stroke="currentColor"
+                    stroke-width="1.5"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  />
+                  <path
+                    d="M5 16L12 20L19 16"
+                    stroke="currentColor"
+                    stroke-width="1.5"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  />
+                </svg>
+              </button>
+              <div
+                v-if="showModelMenu"
+                class="model-menu"
+              >
+                <button
+                  v-for="item in models"
+                  :key="item.id"
+                  :class="['model-menu-item', { 'is-active': item.id === selectedModelProviderId }]"
+                  type="button"
+                  @click="handleSelectModel(item.id)"
+                >
+                  {{ item.name }} / {{ item.model_name }}
+                </button>
+              </div>
+            </div>
             <button
               v-if="showClearSession"
               class="dialog-ghost-action"
@@ -186,6 +240,14 @@ export default {
       type: Array,
       default: () => [],
     },
+    models: {
+      type: Array,
+      default: () => [],
+    },
+    selectedModelProviderId: {
+      type: String,
+      default: '',
+    },
     value: {
       type: String,
       default: '',
@@ -194,6 +256,11 @@ export default {
       type: Boolean,
       default: false,
     },
+  },
+  data() {
+    return {
+      showModelMenu: false,
+    };
   },
   computed: {
     displayedMessages() {
@@ -204,6 +271,13 @@ export default {
     },
     showClearSession() {
       return this.displayedMessages.length > 1;
+    },
+    currentModelLabel() {
+      const currentModel = this.models.find((item) => item.id === this.selectedModelProviderId);
+      if (!currentModel) {
+        return '切换助手模型';
+      }
+      return `当前模型：${currentModel.name} / ${currentModel.model_name}`;
     },
     floatingStatus() {
       for (let index = this.messages.length - 1; index >= 0; index -= 1) {
@@ -228,10 +302,19 @@ export default {
           this.scrollToBottom();
           this.$refs.composerInput?.focus();
         });
+      } else {
+        this.showModelMenu = false;
       }
     },
   },
   methods: {
+    toggleModelMenu() {
+      this.showModelMenu = !this.showModelMenu;
+    },
+    handleSelectModel(providerId) {
+      this.showModelMenu = false;
+      this.$emit('select-model', providerId);
+    },
     scrollToBottom() {
       this.$nextTick(() => {
         const list = this.$refs.messageList;
@@ -303,6 +386,58 @@ export default {
 
 .dialog-header-main {
   min-width: 0;
+}
+
+.model-switcher {
+  position: relative;
+}
+
+.dialog-icon-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border: 1px solid rgba(15, 23, 42, 0.12);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.92);
+  color: #0f172a;
+}
+
+.dialog-icon-action svg {
+  width: 16px;
+  height: 16px;
+}
+
+.model-menu {
+  position: absolute;
+  top: calc(100% + 0.45rem);
+  right: 0;
+  z-index: 4;
+  min-width: 220px;
+  padding: 0.35rem;
+  border-radius: 16px;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 18px 36px rgba(15, 23, 42, 0.12);
+}
+
+.model-menu-item {
+  width: 100%;
+  padding: 0.62rem 0.72rem;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  color: #0f172a;
+  font-size: 0.75rem;
+  text-align: left;
+  transition: background 0.2s ease, color 0.2s ease;
+}
+
+.model-menu-item:hover,
+.model-menu-item.is-active {
+  background: rgba(20, 184, 166, 0.1);
+  color: #0f766e;
 }
 
 .dialog-header-actions {
@@ -436,6 +571,7 @@ export default {
 
 .layout-shell.theme-dark .dialog-close,
 .layout-shell.theme-dark .dialog-ghost-action,
+.layout-shell.theme-dark .dialog-icon-action,
 .layout-shell.theme-dark .quick-action-btn,
 .layout-shell.theme-dark .primary-action,
 .layout-shell.theme-dark .secondary-action,
@@ -443,6 +579,22 @@ export default {
   background: rgba(15, 23, 42, 0.96);
   color: #e2e8f0;
   border-color: rgba(148, 163, 184, 0.2);
+}
+
+.layout-shell.theme-dark .model-menu {
+  background: rgba(15, 23, 42, 0.96);
+  border-color: rgba(148, 163, 184, 0.18);
+  box-shadow: 0 18px 36px rgba(2, 6, 23, 0.5);
+}
+
+.layout-shell.theme-dark .model-menu-item {
+  color: #e2e8f0;
+}
+
+.layout-shell.theme-dark .model-menu-item:hover,
+.layout-shell.theme-dark .model-menu-item.is-active {
+  background: rgba(20, 184, 166, 0.16);
+  color: #5eead4;
 }
 
 .message-list {

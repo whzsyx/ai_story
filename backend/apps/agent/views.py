@@ -9,6 +9,8 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import AccessToken
 
+from apps.models.models import ModelProvider
+from apps.models.opencode_config import OpencodeConfigSyncService
 from .services.context_builder import AgentContextBuilder
 from .services.gateway import AgentGateway
 from .services.session_manager import AgentSessionManager
@@ -38,9 +40,17 @@ class AgentSessionInitView(APIView):
         route_name = (request.data.get('route_name') or '').strip()
         route_params = request.data.get('route_params') or {}
         ui_context = request.data.get('ui_context') or {}
+        selected_model_provider_id = (request.data.get('selected_model_provider_id') or '').strip()
 
         if not scope_key:
             return Response({'error': '缺少 scope_key'}, status=status.HTTP_400_BAD_REQUEST)
+
+        if selected_model_provider_id and not ModelProvider.objects.filter(
+            id=selected_model_provider_id,
+            provider_type='llm',
+            is_active=True,
+        ).exists():
+            return Response({'error': '所选助手模型不可用'}, status=status.HTTP_400_BAD_REQUEST)
 
         manager = AgentSessionManager()
         _, created = manager.init_session(
@@ -49,11 +59,13 @@ class AgentSessionInitView(APIView):
             route_name=route_name,
             route_params=route_params,
             ui_context=ui_context,
+            selected_model_provider_id=selected_model_provider_id,
         )
 
         return Response({
             'scope_key': scope_key,
             'created': created,
+            'selected_model_provider_id': selected_model_provider_id,
             'stream_url': f'/api/v1/agent/session/{scope_key}/stream/',
         })
 
@@ -64,8 +76,16 @@ class AgentSessionMessageView(APIView):
     def post(self, request, scope_key):
         text = (request.data.get('text') or '').strip()
         ui_context = request.data.get('ui_context') or {}
+        selected_model_provider_id = (request.data.get('selected_model_provider_id') or '').strip()
         if not text:
             return Response({'error': '缺少 text'}, status=status.HTTP_400_BAD_REQUEST)
+
+        if selected_model_provider_id and not ModelProvider.objects.filter(
+            id=selected_model_provider_id,
+            provider_type='llm',
+            is_active=True,
+        ).exists():
+            return Response({'error': '所选助手模型不可用'}, status=status.HTTP_400_BAD_REQUEST)
 
         manager = AgentSessionManager()
         session, _ = manager.init_session(
@@ -74,6 +94,7 @@ class AgentSessionMessageView(APIView):
             route_name=(request.data.get('route_name') or '').strip(),
             route_params=request.data.get('route_params') or {},
             ui_context=ui_context,
+            selected_model_provider_id=selected_model_provider_id,
         )
         manager.append_message(request.user.id, scope_key, 'user', text)
 
@@ -83,6 +104,7 @@ class AgentSessionMessageView(APIView):
             'user_id': request.user.id,
             'text': text,
             'ui_context': ui_context or session.get('ui_context') or {},
+            'selected_model_provider_id': selected_model_provider_id or session.get('selected_model_provider_id') or '',
         })
 
         return Response({
@@ -133,6 +155,7 @@ class AgentSessionStreamView(APIView, AgentStreamAuthMixin):
                     user_message=stream_payload.get('text') or '',
                     context=context,
                     ui_context=stream_payload.get('ui_context') or session.get('ui_context') or {},
+                    selected_model_provider_id=stream_payload.get('selected_model_provider_id') or session.get('selected_model_provider_id') or '',
                     manager=manager,
                     user_id=user.id,
                     scope_key=scope_key,
@@ -209,3 +232,27 @@ class AgentSessionClearView(APIView):
 
         manager.clear_session(request.user.id, scope_key)
         return Response({'accepted': True})
+
+
+class AgentModelListView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        queryset = ModelProvider.objects.filter(
+            provider_type='llm',
+            is_active=True,
+        ).order_by('-priority', '-created_at')
+        queryset = [item for item in queryset if OpencodeConfigSyncService.is_supported_provider(item)]
+
+        return Response({
+            'count': len(queryset),
+            'results': [
+                {
+                    'id': str(item.id),
+                    'name': item.name,
+                    'model_name': item.model_name,
+                    'api_url': item.api_url,
+                }
+                for item in queryset
+            ],
+        })

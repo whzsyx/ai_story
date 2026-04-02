@@ -38,6 +38,10 @@ const parseSSEStream = async (response, onEvent) => {
 
 
 export default {
+  getModels() {
+    return agentApi.getModels();
+  },
+
   initSession(payload) {
     return agentApi.initSession(payload);
   },

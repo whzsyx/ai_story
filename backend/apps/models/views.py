@@ -335,6 +335,17 @@ class ModelProviderViewSet(viewsets.ModelViewSet):
         return Response(all_executors)
 
     @action(detail=False, methods=['get'])
+    def opencode_config_status(self, request):
+        """获取 opencode 配置同步状态。"""
+        return Response(ModelProviderService.get_opencode_config_status())
+
+    @action(detail=False, methods=['post'])
+    def sync_opencode_config(self, request):
+        """手动同步模型管理到 opencode 配置文件。"""
+        result = ModelProviderService.sync_opencode_config()
+        return Response(result)
+
+    @action(detail=False, methods=['get'])
     def builtin_vendors(self, request):
         """获取内置厂商目录。"""
         vendors = ModelProviderService.list_builtin_vendors()

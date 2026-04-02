@@ -16,6 +16,10 @@ export default {
     return apiClient.post('/agent/session/init/', data);
   },
 
+  getModels() {
+    return apiClient.get('/agent/models/');
+  },
+
   sendMessage(scopeKey, data) {
     return apiClient.post(`/agent/session/${encodeURIComponent(scopeKey)}/message/`, data);
   },

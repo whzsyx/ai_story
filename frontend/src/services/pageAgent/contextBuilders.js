@@ -67,10 +67,10 @@ export const buildProjectDetailAgentContext = ({ route, project, stages = [], se
     subtitle: project?.series_name || '项目画布',
     summary: getProjectDetailHeadline({ project, stages }),
     quickActions: [
-      '总结当前项目进度',
-      '下一步建议',
-      '定位到分镜阶段',
-      '打开第一个分镜的微调助手',
+      '我现在最适合推进哪一步？',
+      '推荐我下一步操作',
+      '带我去分镜阶段',
+      '打开第一个分镜的助手',
     ],
     capabilities: [
       'focus_stage',

@@ -5,6 +5,8 @@ from json import JSONDecodeError
 import requests
 from django.conf import settings
 
+from apps.models.models import ModelProvider
+from apps.models.opencode_config import OpencodeConfigSyncService
 from .local_agent import LocalAgentResponder
 
 
@@ -64,18 +66,80 @@ class AgentGateway:
             'text': user_message,
         }]
 
-    def _build_prompt_payload(self, user_message, context, ui_context):
+    def _fetch_runtime_provider_map(self):
+        if not self.server_base_url:
+            return {}
+
+        client = self._session()
+        response = client.get(
+            f'{self.server_base_url}/config/providers',
+            params=self._query_params(),
+            timeout=15,
+        )
+        response.raise_for_status()
+
+        payload = response.json() or {}
+        providers = payload.get('providers') or []
+        return {
+            item.get('id'): item
+            for item in providers
+            if item.get('id')
+        }
+
+    def _assert_runtime_model_available(self, provider_id, model_id, selected_model_provider_id=''):
+        if not self.server_base_url or not selected_model_provider_id:
+            return
+
+        provider_map = self._fetch_runtime_provider_map()
+        provider_info = provider_map.get(provider_id) or {}
+        models = provider_info.get('models') or {}
+        if model_id in models:
+            return
+
+        OpencodeConfigSyncService.sync()
+        raise RuntimeError(
+            f'所选助手模型 {provider_id}/{model_id} 已写入 opencode 配置文件，但当前 opencode serve 尚未加载它。请重启 opencode serve 后重试。'
+        )
+
+    def _resolve_model_target(self, selected_model_provider_id=''):
+        if selected_model_provider_id:
+            provider = ModelProvider.objects.filter(
+                id=selected_model_provider_id,
+                provider_type='llm',
+                is_active=True,
+            ).first()
+            if provider:
+                runtime_target = OpencodeConfigSyncService.build_runtime_target(provider)
+                return {
+                    'provider_id': runtime_target['provider_id'],
+                    'model_id': runtime_target['model_id'],
+                    'variant': runtime_target.get('variant') or '',
+                }
+
+        return {
+            'provider_id': self.model_provider_id,
+            'model_id': self.model_id,
+            'variant': self.model_variant,
+        }
+
+    def _build_prompt_payload(self, user_message, context, ui_context, selected_model_provider_id=''):
+        model_target = self._resolve_model_target(selected_model_provider_id)
+        self._assert_runtime_model_available(
+            model_target['provider_id'],
+            model_target['model_id'],
+            selected_model_provider_id=selected_model_provider_id,
+        )
         payload = {
             'model': {
-                'providerID': self.model_provider_id,
-                'modelID': self.model_id,
+                'providerID': model_target['provider_id'],
+                'modelID': model_target['model_id'],
             },
             'system': self._build_system_prompt(context, ui_context),
             'parts': self._build_message_parts(user_message),
             'noReply': False,
         }
-        if self.model_variant:
-            payload['variant'] = self.model_variant
+        if model_target['variant']:
+            payload['variant'] = model_target['variant']
         if self.agent_name:
             payload['agent'] = self.agent_name
         return payload
@@ -114,7 +178,7 @@ class AgentGateway:
         response.raise_for_status()
         return True
 
-    def stream_response(self, *, session, user_message, context, ui_context=None, manager=None, user_id=None, scope_key=None):
+    def stream_response(self, *, session, user_message, context, ui_context=None, selected_model_provider_id='', manager=None, user_id=None, scope_key=None):
         if not self.server_base_url:
             yield from self.local_responder.stream_events(
                 user_message=user_message,
@@ -143,7 +207,7 @@ class AgentGateway:
         prompt_response = client.post(
             f'{self.server_base_url}/session/{remote_session_id}/prompt_async',
             params=self._query_params(),
-            json=self._build_prompt_payload(user_message, context, ui_context),
+            json=self._build_prompt_payload(user_message, context, ui_context, selected_model_provider_id=selected_model_provider_id),
             timeout=30,
         )
         prompt_response.raise_for_status()

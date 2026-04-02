@@ -7,6 +7,7 @@ from .views import (
     AgentSessionUiResultView,
     AgentSessionAbortView,
     AgentSessionClearView,
+    AgentModelListView,
 )
 
 
@@ -17,4 +18,5 @@ urlpatterns = [
     path('session/<str:scope_key>/ui-result/', AgentSessionUiResultView.as_view(), name='agent-session-ui-result'),
     path('session/<str:scope_key>/abort/', AgentSessionAbortView.as_view(), name='agent-session-abort'),
     path('session/<str:scope_key>/clear/', AgentSessionClearView.as_view(), name='agent-session-clear'),
+    path('models/', AgentModelListView.as_view(), name='agent-model-list'),
 ]

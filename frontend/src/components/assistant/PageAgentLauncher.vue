@@ -7,6 +7,8 @@
       :summary="currentContext?.summary || ''"
       :quick-actions="currentContext?.quickActions || []"
       :messages="messages"
+      :models="availableModels"
+      :selected-model-provider-id="selectedModelProviderId"
       :value="draft"
       :streaming="streaming"
       @close="close"
@@ -14,6 +16,7 @@
       @submit="sendCurrentDraft"
       @stop="abort"
       @clear-session="clearSession"
+      @select-model="selectModel"
       @quick-action="sendMessage"
       @execute-suggestion="executeSuggestion"
     />
@@ -61,7 +64,7 @@ export default {
     PageAgentDialog,
   },
   computed: {
-    ...mapGetters('assistant', ['visible', 'streaming', 'draft', 'currentContext', 'messages']),
+    ...mapGetters('assistant', ['visible', 'streaming', 'draft', 'currentContext', 'messages', 'availableModels', 'selectedModelProviderId']),
   },
   watch: {
     '$route.fullPath': {
@@ -71,8 +74,15 @@ export default {
       },
     },
   },
+  async created() {
+    try {
+      await this.fetchModels();
+    } catch (error) {
+      console.error('Failed to load assistant models:', error);
+    }
+  },
   methods: {
-    ...mapActions('assistant', ['toggle', 'close', 'updateDraft', 'sendMessage', 'executeSuggestion', 'registerContext', 'abort', 'clearSession']),
+    ...mapActions('assistant', ['toggle', 'close', 'updateDraft', 'sendMessage', 'executeSuggestion', 'registerContext', 'abort', 'clearSession', 'fetchModels', 'selectModel']),
     ensureFallbackContext() {
       if (
         this.currentContext

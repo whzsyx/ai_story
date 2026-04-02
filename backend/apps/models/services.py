@@ -13,6 +13,7 @@ from django.db import transaction
 from django.db.models import Q, Avg, Sum
 from asgiref.sync import sync_to_async
 from .models import ModelProvider, ModelUsageLog, VendorConnectionConfig
+from .opencode_config import OpencodeConfigSyncService
 from .vendor_catalog import VENDOR_CATALOG
 from urllib.parse import urlparse
 
@@ -169,6 +170,7 @@ class ModelProviderService:
             创建的模型提供商实例
         """
         provider = ModelProvider.objects.create(**data)
+        transaction.on_commit(OpencodeConfigSyncService.sync)
         return provider
 
 
@@ -474,6 +476,8 @@ class ModelProviderService:
             )
             created.append(provider)
 
+        transaction.on_commit(OpencodeConfigSyncService.sync)
+
         return {
             'vendor': vendor,
             'vendor_label': vendor_config['label'],
@@ -505,6 +509,7 @@ class ModelProviderService:
             setattr(provider, key, value)
 
         provider.save()
+        transaction.on_commit(OpencodeConfigSyncService.sync)
         return provider
 
     @staticmethod
@@ -522,6 +527,7 @@ class ModelProviderService:
         try:
             provider = ModelProvider.objects.get(id=provider_id)
             provider.delete()
+            transaction.on_commit(OpencodeConfigSyncService.sync)
             return True
         except ModelProvider.DoesNotExist:
             return False
@@ -541,7 +547,18 @@ class ModelProviderService:
         provider = ModelProvider.objects.get(id=provider_id)
         provider.is_active = not provider.is_active
         provider.save()
+        transaction.on_commit(OpencodeConfigSyncService.sync)
         return provider
+
+    @staticmethod
+    def sync_opencode_config() -> Dict[str, Any]:
+        """将当前激活的 LLM 提供商同步到 opencode 配置文件。"""
+        return OpencodeConfigSyncService.sync()
+
+    @staticmethod
+    def get_opencode_config_status() -> Dict[str, Any]:
+        """获取 opencode 配置文件同步状态。"""
+        return OpencodeConfigSyncService.get_status()
 
     @staticmethod
     def get_provider_statistics(provider_id: str) -> Dict[str, Any]:

@@ -43,6 +43,8 @@ const state = {
   currentContext: null,
   activeScopeKey: '',
   messages: [],
+  availableModels: [],
+  selectedModelProviderId: '',
   sessions: {},
   initializedScopes: {},
   requestController: null,
@@ -54,6 +56,8 @@ const getters = {
   draft: (state) => state.draft,
   currentContext: (state) => state.currentContext,
   messages: (state) => state.messages,
+  availableModels: (state) => state.availableModels,
+  selectedModelProviderId: (state) => state.selectedModelProviderId,
 };
 
 const mutations = {
@@ -104,6 +108,16 @@ const mutations = {
   },
   SET_REQUEST_CONTROLLER(state, controller) {
     state.requestController = controller;
+  },
+  SET_AVAILABLE_MODELS(state, models) {
+    state.availableModels = models;
+    if (state.selectedModelProviderId && models.some((item) => item.id === state.selectedModelProviderId)) {
+      return;
+    }
+    state.selectedModelProviderId = models[0]?.id || '';
+  },
+  SET_SELECTED_MODEL_PROVIDER_ID(state, providerId) {
+    state.selectedModelProviderId = providerId || '';
   },
   CLEAR_SESSION(state, scopeKey) {
     if (!scopeKey) {
@@ -182,6 +196,7 @@ const actions = {
           route_name: context?.meta?.routeName || '',
           route_params: buildRouteParams(context),
           ui_context: buildUiContext(context),
+          selected_model_provider_id: state.selectedModelProviderId,
         });
         commit('SET_SCOPE_INITIALIZED', context.scopeKey);
       } catch (error) {
@@ -208,6 +223,7 @@ const actions = {
         route_name: state.currentContext?.meta?.routeName || '',
         route_params: buildRouteParams(state.currentContext),
         ui_context: buildUiContext(state.currentContext),
+        selected_model_provider_id: state.selectedModelProviderId,
       });
 
       const controller = new AbortController();
@@ -330,11 +346,64 @@ const actions = {
             route_name: state.currentContext?.meta?.routeName || '',
             route_params: buildRouteParams(state.currentContext),
             ui_context: buildUiContext(state.currentContext),
+            selected_model_provider_id: state.selectedModelProviderId,
           });
           commit('SET_SCOPE_INITIALIZED', state.activeScopeKey);
         } catch (error) {
           console.error('Failed to re-init agent session after clear:', error);
         }
+      }
+    }
+  },
+  async fetchModels({ commit, state }) {
+    try {
+      const response = await agentService.getModels();
+      const models = response.results || [];
+      commit('SET_AVAILABLE_MODELS', models);
+      return models;
+    } catch (error) {
+      console.error('Failed to fetch assistant models:', error);
+      if (!state.availableModels.length) {
+        commit('SET_AVAILABLE_MODELS', []);
+      }
+      throw error;
+    }
+  },
+  async selectModel({ commit, state, dispatch }, providerId) {
+    if (!providerId || providerId === state.selectedModelProviderId) {
+      return;
+    }
+
+    commit('SET_SELECTED_MODEL_PROVIDER_ID', providerId);
+
+    try {
+      await agentService.initSession({
+        scope_key: state.currentContext?.scopeKey || state.activeScopeKey || 'page-agent',
+        route_name: state.currentContext?.meta?.routeName || '',
+        route_params: buildRouteParams(state.currentContext),
+        ui_context: buildUiContext(state.currentContext),
+        selected_model_provider_id: providerId,
+      });
+    } catch (error) {
+      console.error('Failed to persist selected assistant model:', error);
+    }
+
+    if (state.activeScopeKey) {
+      await dispatch('clearSession');
+    }
+
+    if (state.currentContext?.scopeKey) {
+      try {
+        await agentService.initSession({
+          scope_key: state.currentContext.scopeKey,
+          route_name: state.currentContext?.meta?.routeName || '',
+          route_params: buildRouteParams(state.currentContext),
+          ui_context: buildUiContext(state.currentContext),
+          selected_model_provider_id: providerId,
+        });
+        commit('SET_SCOPE_INITIALIZED', state.currentContext.scopeKey);
+      } catch (error) {
+        console.error('Failed to init agent session after model change:', error);
       }
     }
   },
