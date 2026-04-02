@@ -65,11 +65,14 @@
                 <button
                   v-for="item in models"
                   :key="item.id"
-                  :class="['model-menu-item', { 'is-active': item.id === selectedModelProviderId }]"
+                  :class="['model-menu-item', `status-${item.runtime_status || 'unknown'}`, { 'is-active': item.id === selectedModelProviderId, 'is-disabled': !item.runtime_available }]"
                   type="button"
+                  :disabled="!item.runtime_available"
+                  :title="getModelTooltip(item)"
                   @click="handleSelectModel(item.id)"
                 >
-                  {{ item.name }} / {{ item.model_name }}
+                  <span class="model-menu-title">{{ item.name }} / {{ item.model_name }}</span>
+                  <small v-if="getModelStatusLabel(item)" class="model-menu-status">{{ getModelStatusLabel(item) }}</small>
                 </button>
               </div>
             </div>
@@ -277,7 +280,10 @@ export default {
       if (!currentModel) {
         return '切换助手模型';
       }
-      return `当前模型：${currentModel.name} / ${currentModel.model_name}`;
+      const statusLabel = this.getModelStatusLabel(currentModel);
+      return statusLabel
+        ? `当前模型：${currentModel.name} / ${currentModel.model_name}（${statusLabel}）`
+        : `当前模型：${currentModel.name} / ${currentModel.model_name}`;
     },
     floatingStatus() {
       for (let index = this.messages.length - 1; index >= 0; index -= 1) {
@@ -308,6 +314,17 @@ export default {
     },
   },
   methods: {
+    getModelStatusLabel(model) {
+      if (model.runtime_status === 'restart_required') {
+        return '需重启';
+      }
+      return '';
+    },
+    getModelTooltip(model) {
+      const baseLabel = `${model.name} / ${model.model_name}`;
+      const statusLabel = this.getModelStatusLabel(model);
+      return statusLabel ? `${baseLabel}（${statusLabel}）` : baseLabel;
+    },
     toggleModelMenu() {
       this.showModelMenu = !this.showModelMenu;
     },
@@ -414,30 +431,80 @@ export default {
   top: calc(100% + 0.45rem);
   right: 0;
   z-index: 4;
-  min-width: 220px;
-  padding: 0.35rem;
-  border-radius: 16px;
+  width: min(280px, calc(100vw - 48px));
+  max-height: min(320px, calc(100vh - 180px));
+  overflow-y: auto;
+  padding: 0.28rem;
+  border-radius: 14px;
   border: 1px solid rgba(148, 163, 184, 0.18);
   background: rgba(255, 255, 255, 0.96);
   box-shadow: 0 18px 36px rgba(15, 23, 42, 0.12);
 }
 
+.model-menu::-webkit-scrollbar {
+  width: 6px;
+}
+
+.model-menu::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.42);
+}
+
 .model-menu-item {
   width: 100%;
-  padding: 0.62rem 0.72rem;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.08rem;
+  padding: 0.48rem 0.56rem;
   border: 0;
-  border-radius: 12px;
+  border-radius: 10px;
   background: transparent;
   color: #0f172a;
-  font-size: 0.75rem;
+  font-size: 0.72rem;
   text-align: left;
   transition: background 0.2s ease, color 0.2s ease;
+}
+
+.model-menu-title {
+  display: block;
+  font-weight: 600;
+  width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.model-menu-status {
+  display: block;
+  font-size: 0.64rem;
+  color: #b45309;
 }
 
 .model-menu-item:hover,
 .model-menu-item.is-active {
   background: rgba(20, 184, 166, 0.1);
   color: #0f766e;
+}
+
+.model-menu-item.status-ready .model-menu-status {
+  color: #0f766e;
+}
+
+.model-menu-item.status-restart_required .model-menu-status {
+  color: #b45309;
+}
+
+.model-menu-item.is-disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+.model-menu-item.is-disabled:hover {
+  background: transparent;
+  color: #0f172a;
+  transform: none;
+  box-shadow: none;
 }
 
 .dialog-header-actions {
@@ -595,6 +662,18 @@ export default {
 .layout-shell.theme-dark .model-menu-item.is-active {
   background: rgba(20, 184, 166, 0.16);
   color: #5eead4;
+}
+
+.layout-shell.theme-dark .model-menu-status {
+  color: #fbbf24;
+}
+
+.layout-shell.theme-dark .model-menu-item.status-restart_required .model-menu-status {
+  color: #fbbf24;
+}
+
+.layout-shell.theme-dark .model-menu-item.is-disabled:hover {
+  color: #e2e8f0;
 }
 
 .message-list {

@@ -12,6 +12,7 @@ from .local_agent import LocalAgentResponder
 
 
 AGENT_UI_BLOCK_RE = re.compile(r'```agent-ui\s*(\{.*?\})\s*```', re.DOTALL)
+RUNTIME_PROVIDER_MAP_UNSET = object()
 
 
 class AgentGateway:
@@ -87,14 +88,72 @@ class AgentGateway:
             if item.get('id')
         }
 
+    def fetch_runtime_provider_map_safe(self):
+        if not self.server_base_url:
+            return {}
+        try:
+            return self._fetch_runtime_provider_map()
+        except requests.RequestException:
+            return None
+
+    def _runtime_provider_has_model(self, provider_info, model_id):
+        models = provider_info.get('models') or {}
+        if isinstance(models, dict):
+            return model_id in models
+        if isinstance(models, list):
+            for item in models:
+                if item == model_id:
+                    return True
+                if isinstance(item, dict) and item.get('id') == model_id:
+                    return True
+        return False
+
+    def get_runtime_model_status(self, provider_id, model_id, provider_map=RUNTIME_PROVIDER_MAP_UNSET):
+        if not self.server_base_url:
+            return {
+                'runtime_checked': True,
+                'runtime_available': True,
+                'runtime_status': 'ready',
+            }
+
+        if provider_map is RUNTIME_PROVIDER_MAP_UNSET:
+            provider_map = self.fetch_runtime_provider_map_safe()
+
+        if provider_map is None:
+            return {
+                'runtime_checked': False,
+                'runtime_available': False,
+                'runtime_status': 'unknown',
+            }
+
+        provider_info = provider_map.get(provider_id) or {}
+        runtime_available = self._runtime_provider_has_model(provider_info, model_id)
+        return {
+            'runtime_checked': True,
+            'runtime_available': runtime_available,
+            'runtime_status': 'ready' if runtime_available else 'restart_required',
+        }
+
+    def get_selection_runtime_status(self, selected_model_provider_id='', provider_map=RUNTIME_PROVIDER_MAP_UNSET):
+        model_target = self._resolve_model_target(selected_model_provider_id)
+        status = self.get_runtime_model_status(
+            model_target['provider_id'],
+            model_target['model_id'],
+            provider_map=provider_map,
+        )
+        return {
+            **status,
+            'provider_id': model_target['provider_id'],
+            'model_id': model_target['model_id'],
+            'variant': model_target.get('variant') or '',
+        }
+
     def _assert_runtime_model_available(self, provider_id, model_id, selected_model_provider_id=''):
         if not self.server_base_url or not selected_model_provider_id:
             return
 
-        provider_map = self._fetch_runtime_provider_map()
-        provider_info = provider_map.get(provider_id) or {}
-        models = provider_info.get('models') or {}
-        if model_id in models:
+        runtime_status = self.get_runtime_model_status(provider_id, model_id)
+        if runtime_status['runtime_available']:
             return
 
         OpencodeConfigSyncService.sync()
@@ -131,7 +190,7 @@ class AgentGateway:
             'variant': self.model_variant,
         }
 
-    def _build_prompt_payload(self, user_message, context, ui_context, selected_model_provider_id=''):
+    def _build_prompt_payload(self, user_message, context, ui_context, selected_model_provider_id='', include_agent=True):
         model_target = self._resolve_model_target(selected_model_provider_id)
         self._assert_runtime_model_available(
             model_target['provider_id'],
@@ -149,9 +208,68 @@ class AgentGateway:
         }
         if model_target['variant']:
             payload['variant'] = model_target['variant']
-        if self.agent_name:
+        if include_agent and self.agent_name:
             payload['agent'] = self.agent_name
         return payload
+
+    def _should_retry_without_agent(self, error):
+        if not self.agent_name:
+            return False
+
+        response = getattr(error, 'response', None)
+        if response is None:
+            return False
+
+        try:
+            payload = response.json() or {}
+            message = json.dumps(payload, ensure_ascii=False)
+        except ValueError:
+            message = response.text or ''
+
+        normalized = message.lower()
+        schema_markers = (
+            'invalid json payload',
+            'unknown name "ref"',
+            "unknown name '$ref'",
+            'function_declarations',
+            'function declarations',
+            'tools[',
+        )
+        return any(marker in normalized for marker in schema_markers)
+
+    def _submit_prompt(self, client, remote_session_id, user_message, context, ui_context, selected_model_provider_id=''):
+        try:
+            response = client.post(
+                f'{self.server_base_url}/session/{remote_session_id}/prompt_async',
+                params=self._query_params(),
+                json=self._build_prompt_payload(
+                    user_message,
+                    context,
+                    ui_context,
+                    selected_model_provider_id=selected_model_provider_id,
+                    include_agent=True,
+                ),
+                timeout=30,
+            )
+            response.raise_for_status()
+            return
+        except requests.HTTPError as error:
+            if not self._should_retry_without_agent(error):
+                raise
+
+        retry_response = client.post(
+            f'{self.server_base_url}/session/{remote_session_id}/prompt_async',
+            params=self._query_params(),
+            json=self._build_prompt_payload(
+                user_message,
+                context,
+                ui_context,
+                selected_model_provider_id=selected_model_provider_id,
+                include_agent=False,
+            ),
+            timeout=30,
+        )
+        retry_response.raise_for_status()
 
     def ensure_remote_session(self, *, session, manager=None, user_id=None, scope_key=None):
         remote_session_id = session.get('agent_session_id')
@@ -213,13 +331,14 @@ class AgentGateway:
         )
         event_response.raise_for_status()
 
-        prompt_response = client.post(
-            f'{self.server_base_url}/session/{remote_session_id}/prompt_async',
-            params=self._query_params(),
-            json=self._build_prompt_payload(user_message, context, ui_context, selected_model_provider_id=selected_model_provider_id),
-            timeout=30,
+        self._submit_prompt(
+            client,
+            remote_session_id,
+            user_message,
+            context,
+            ui_context,
+            selected_model_provider_id=selected_model_provider_id,
         )
-        prompt_response.raise_for_status()
 
         assistant_message_id = None
         accumulated_text = ''
@@ -306,7 +425,7 @@ class AgentGateway:
 
     def _iter_sse_events(self, response):
         event_lines = []
-        for raw_line in response.iter_lines(chunk_size=1, decode_unicode=True):
+        for raw_line in response.iter_lines(chunk_size=1, decode_unicode=False):
             if raw_line == '':
                 payload = self._parse_sse_event_lines(event_lines)
                 event_lines = []

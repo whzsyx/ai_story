@@ -1,9 +1,13 @@
 from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings
 from rest_framework.test import APIClient
+from unittest.mock import Mock, patch
+
+import requests
 
 from apps.agent.services.builtin_models import BuiltinAgentModelRegistry
 from apps.agent.services.gateway import AgentGateway
+from apps.models.models import ModelProvider
 from apps.users.models import UserPreference
 
 
@@ -34,6 +38,58 @@ class AgentModelListViewTestCase(TestCase):
         model_ids = [item['id'] for item in response.data['results']]
         self.assertIn('builtin:opencode/big-pickle', model_ids)
         self.assertIn('builtin:opencode/minimax-m2.5-free', model_ids)
+
+    @override_settings(AGENT_SERVER_BASE_URL='http://opencode.local', AGENT_SHOW_FREE_MODELS='false')
+    def test_get_models_marks_runtime_status_for_database_provider(self):
+        provider = ModelProvider.objects.create(
+            name='Runtime Ready',
+            provider_type='llm',
+            executor_class='core.ai_client.openai_client.OpenAIClient',
+            api_url='https://example.com/v1/chat/completions',
+            api_key='secret',
+            model_name='gpt-ready',
+            is_active=True,
+        )
+
+        runtime_target = AgentGateway()._resolve_model_target(str(provider.id))
+        runtime_provider_map = {
+            runtime_target['provider_id']: {
+                'models': {
+                    runtime_target['model_id']: {},
+                },
+            },
+        }
+
+        with patch.object(AgentGateway, 'fetch_runtime_provider_map_safe', return_value=runtime_provider_map):
+            response = self.client.get('/api/v1/agent/models/')
+
+        self.assertEqual(response.status_code, 200)
+        model = response.data['results'][0]
+        self.assertEqual(model['id'], str(provider.id))
+        self.assertTrue(model['runtime_available'])
+        self.assertEqual(model['runtime_status'], 'ready')
+
+    @override_settings(AGENT_SERVER_BASE_URL='http://opencode.local', AGENT_SHOW_FREE_MODELS='false')
+    def test_post_rejects_model_when_runtime_requires_restart(self):
+        provider = ModelProvider.objects.create(
+            name='Needs Restart',
+            provider_type='llm',
+            executor_class='core.ai_client.openai_client.OpenAIClient',
+            api_url='https://example.com/v1/chat/completions',
+            api_key='secret',
+            model_name='gpt-restart',
+            is_active=True,
+        )
+
+        with patch.object(AgentGateway, 'fetch_runtime_provider_map_safe', return_value={}):
+            response = self.client.post(
+                '/api/v1/agent/models/',
+                {'selected_model_provider_id': str(provider.id)},
+                format='json',
+            )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('重启 opencode serve', response.data['error'])
 
     @override_settings(AGENT_SHOW_FREE_MODELS='true')
     def test_post_accepts_builtin_model_selection(self):
@@ -68,3 +124,71 @@ class AgentGatewayTestCase(TestCase):
         self.assertEqual(target['provider_id'], 'opencode')
         self.assertEqual(target['model_id'], 'nemotron-3-super-free')
         self.assertEqual(target['variant'], '')
+
+    @override_settings(AGENT_SERVER_BASE_URL='http://opencode.local')
+    def test_get_runtime_model_status_returns_unknown_when_fetch_fails(self):
+        gateway = AgentGateway()
+        gateway._fetch_runtime_provider_map = Mock(side_effect=requests.RequestException('boom'))
+
+        status = gateway.get_runtime_model_status('opencode', 'big-pickle')
+
+        self.assertFalse(status['runtime_checked'])
+        self.assertFalse(status['runtime_available'])
+        self.assertEqual(status['runtime_status'], 'unknown')
+
+    @override_settings(AGENT_REMOTE_AGENT_NAME='build')
+    def test_submit_prompt_retries_without_agent_on_schema_validation_error(self):
+        gateway = AgentGateway()
+        client = Mock()
+
+        error_response = Mock()
+        error_response.json.return_value = {
+            'error': {
+                'message': 'Invalid JSON payload received. Unknown name "ref" at \'tools[0].function_declarations[0]\''
+            }
+        }
+        http_error = requests.HTTPError(response=error_response)
+
+        first_response = Mock()
+        first_response.raise_for_status.side_effect = http_error
+        second_response = Mock()
+        second_response.raise_for_status.return_value = None
+        client.post.side_effect = [first_response, second_response]
+
+        gateway._submit_prompt(
+            client,
+            'session-1',
+            'hello',
+            {'page': 'project'},
+            {'allowed_ui_actions': []},
+        )
+
+        self.assertEqual(client.post.call_count, 2)
+        first_payload = client.post.call_args_list[0].kwargs['json']
+        second_payload = client.post.call_args_list[1].kwargs['json']
+        self.assertEqual(first_payload['agent'], 'build')
+        self.assertNotIn('agent', second_payload)
+
+    @override_settings(AGENT_REMOTE_AGENT_NAME='build')
+    def test_submit_prompt_keeps_error_when_it_is_not_schema_related(self):
+        gateway = AgentGateway()
+        client = Mock()
+
+        error_response = Mock()
+        error_response.json.return_value = {'error': {'message': 'upstream timeout'}}
+        http_error = requests.HTTPError(response=error_response)
+
+        first_response = Mock()
+        first_response.raise_for_status.side_effect = http_error
+        client.post.return_value = first_response
+
+        with self.assertRaises(requests.HTTPError):
+            gateway._submit_prompt(
+                client,
+                'session-1',
+                'hello',
+                {'page': 'project'},
+                {'allowed_ui_actions': []},
+            )
+
+        self.assertEqual(client.post.call_count, 1)

@@ -23,6 +23,11 @@ const createStatusMessage = (content) => createMessage('system', content, {
 
 const createFreshMessages = (context) => (context ? [createInitialAssistantMessage(context)] : []);
 
+const pickDefaultModelId = (models) => {
+  const readyModel = models.find((item) => item.runtime_available);
+  return readyModel?.id || '';
+};
+
 const syncSession = (state) => {
   const scopeKey = state.activeScopeKey;
   if (!scopeKey) {
@@ -111,10 +116,10 @@ const mutations = {
   },
   SET_AVAILABLE_MODELS(state, models) {
     state.availableModels = models;
-    if (state.selectedModelProviderId && models.some((item) => item.id === state.selectedModelProviderId)) {
+    if (state.selectedModelProviderId && models.some((item) => item.id === state.selectedModelProviderId && item.runtime_available)) {
       return;
     }
-    state.selectedModelProviderId = models[0]?.id || '';
+    state.selectedModelProviderId = pickDefaultModelId(models);
   },
   SET_SELECTED_MODEL_PROVIDER_ID(state, providerId) {
     state.selectedModelProviderId = providerId || '';
@@ -361,11 +366,12 @@ const actions = {
       const models = response.results || [];
       commit('SET_AVAILABLE_MODELS', models);
       const persistedProviderId = response.selected_model_provider_id || '';
+      const persistedModel = models.find((item) => item.id === persistedProviderId);
 
-      if (persistedProviderId && models.some((item) => item.id === persistedProviderId)) {
+      if (persistedModel?.runtime_available) {
         commit('SET_SELECTED_MODEL_PROVIDER_ID', persistedProviderId);
-      } else if (!state.selectedModelProviderId && models.length) {
-        commit('SET_SELECTED_MODEL_PROVIDER_ID', models[0].id);
+      } else if (!state.availableModels.some((item) => item.id === state.selectedModelProviderId && item.runtime_available)) {
+        commit('SET_SELECTED_MODEL_PROVIDER_ID', pickDefaultModelId(models));
       }
 
       return models;
@@ -378,7 +384,8 @@ const actions = {
     }
   },
   async selectModel({ commit, state, dispatch }, providerId) {
-    if (!providerId || providerId === state.selectedModelProviderId) {
+    const targetModel = state.availableModels.find((item) => item.id === providerId);
+    if (!providerId || providerId === state.selectedModelProviderId || !targetModel?.runtime_available) {
       return;
     }
 

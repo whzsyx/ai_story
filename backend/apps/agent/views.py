@@ -2,6 +2,7 @@ import json
 import uuid
 
 from django.contrib.auth import get_user_model
+from django.core.exceptions import ValidationError
 from django.http import StreamingHttpResponse
 from rest_framework import status
 from rest_framework.permissions import AllowAny, IsAuthenticated
@@ -29,11 +30,15 @@ def _is_supported_assistant_model(provider_id, require_opencode_support=False):
     if BuiltinAgentModelRegistry.is_valid_selection(normalized_provider_id):
         return True
 
-    provider = ModelProvider.objects.filter(
-        id=normalized_provider_id,
-        provider_type='llm',
-        is_active=True,
-    ).first()
+    try:
+        provider = ModelProvider.objects.filter(
+            id=normalized_provider_id,
+            provider_type='llm',
+            is_active=True,
+        ).first()
+    except (ValidationError, ValueError, TypeError):
+        return False
+
     if not provider:
         return False
 
@@ -278,13 +283,26 @@ class AgentModelListView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
+        gateway = AgentGateway()
+        runtime_provider_map = gateway.fetch_runtime_provider_map_safe()
         queryset = ModelProvider.objects.filter(
             provider_type='llm',
             is_active=True,
         ).order_by('-priority', '-created_at')
         queryset = [item for item in queryset if OpencodeConfigSyncService.is_supported_provider(item)]
 
-        builtin_models = BuiltinAgentModelRegistry.list_models()
+        builtin_models = []
+        for item in BuiltinAgentModelRegistry.list_models():
+            runtime_status = gateway.get_runtime_model_status(
+                item['provider_id'],
+                item['model_id'],
+                provider_map=runtime_provider_map,
+            )
+            builtin_models.append({
+                **item,
+                **runtime_status,
+            })
+
         selected_model_provider_id = AgentSessionInitView._get_persisted_model_provider_id(request.user)
         return Response({
             'count': len(queryset) + len(builtin_models),
@@ -295,6 +313,10 @@ class AgentModelListView(APIView):
                     'name': item.name,
                     'model_name': item.model_name,
                     'api_url': item.api_url,
+                    **gateway.get_selection_runtime_status(
+                        str(item.id),
+                        provider_map=runtime_provider_map,
+                    ),
                 }
                 for item in queryset
             ] + builtin_models,
@@ -307,6 +329,13 @@ class AgentModelListView(APIView):
 
         if not _is_supported_assistant_model(selected_model_provider_id, require_opencode_support=True):
             return Response({'error': '所选助手模型不可用'}, status=status.HTTP_400_BAD_REQUEST)
+
+        gateway = AgentGateway()
+        runtime_status = gateway.get_selection_runtime_status(selected_model_provider_id)
+        if not runtime_status['runtime_available']:
+            if runtime_status['runtime_status'] == 'restart_required':
+                return Response({'error': '所选助手模型尚未被 opencode serve 加载，请重启 opencode serve 后重试。'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({'error': '暂时无法确认所选助手模型的运行时状态，请稍后重试。'}, status=status.HTTP_400_BAD_REQUEST)
 
         UserPreference.objects.update_or_create(
             user=request.user,
