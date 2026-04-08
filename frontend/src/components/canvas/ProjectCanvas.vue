@@ -377,6 +377,7 @@
               v-for="asset in availableAssets"
               :key="asset.id"
               class="asset-drawer-item"
+              :class="{ 'is-image': asset.variable_type === 'image' }"
             >
               <input
                 :checked="selectedAssetIds.includes(asset.id)"
@@ -384,6 +385,24 @@
                 class="checkbox checkbox-sm"
                 @change.stop="handleAssetBindingToggle(asset.id)"
               >
+              <div
+                v-if="asset.variable_type === 'image'"
+                class="asset-drawer-preview"
+                @click.stop="asset.image_url && previewAssetImage(asset.image_url)"
+              >
+                <img
+                  v-if="asset.image_url"
+                  :src="asset.image_url"
+                  :alt="asset.key"
+                  class="asset-drawer-preview-image"
+                >
+                <div
+                  v-else
+                  class="asset-drawer-preview-placeholder"
+                >
+                  暂无图片
+                </div>
+              </div>
               <div class="asset-drawer-meta">
                 <div class="asset-drawer-key-row">
                   <code class="asset-drawer-key">{{ asset.key }}</code>
@@ -393,6 +412,12 @@
                   >{{ asset.group }}</span>
                 </div>
                 <div class="asset-drawer-type">{{ asset.variable_type_display }} · {{ asset.scope_display }}</div>
+                <div
+                  v-if="asset.description"
+                  class="asset-drawer-description"
+                >
+                  {{ asset.description }}
+                </div>
               </div>
             </label>
           </div>
@@ -573,6 +598,35 @@
       </flow-canvas>
     </div>
 
+    <div
+      v-if="assetPreviewImageUrl"
+      class="modal modal-open"
+      @click="assetPreviewImageUrl = null"
+    >
+      <div
+        class="modal-box max-w-4xl"
+        @click.stop
+      >
+        <img
+          :src="assetPreviewImageUrl"
+          alt="资产预览"
+          class="w-full"
+        >
+        <div class="modal-action">
+          <button
+            class="btn"
+            @click="assetPreviewImageUrl = null"
+          >
+            关闭
+          </button>
+        </div>
+      </div>
+      <div
+        class="modal-backdrop"
+        @click="assetPreviewImageUrl = null"
+      />
+    </div>
+
     <node-chat-drawer
       ref="nodeChatDrawer"
       :visible="nodeChat.visible"
@@ -684,6 +738,7 @@ export default {
       showAssetDrawer: false,
       availableAssets: [],
       selectedAssetIds: [],
+      assetPreviewImageUrl: null,
       runtimeMediaDimensions: {},
       measuredNodeHeights: {},
       pendingMeasuredHeights: {},
@@ -1806,6 +1861,10 @@ export default {
     async handleAssetExtractionBindingsUpdated() {
       await this.loadProjectAssets();
       this.$emit('asset-bindings-updated');
+    },
+
+    previewAssetImage(url) {
+      this.assetPreviewImageUrl = url;
     },
 
     async handleAssetBindingToggle(assetId) {
@@ -3111,6 +3170,47 @@ export default {
   transition: all 0.2s ease;
 }
 
+.asset-drawer-item.is-image {
+  align-items: stretch;
+}
+
+.asset-drawer-preview {
+  width: 84px;
+  min-width: 84px;
+  height: 84px;
+  border-radius: 12px;
+  overflow: hidden;
+  background: rgba(226, 232, 240, 0.55);
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  cursor: zoom-in;
+}
+
+.layout-shell.theme-dark .asset-drawer-preview {
+  background: rgba(30, 41, 59, 0.9);
+  border-color: rgba(148, 163, 184, 0.14);
+}
+
+.asset-drawer-preview-image,
+.asset-drawer-preview-placeholder {
+  width: 100%;
+  height: 100%;
+}
+
+.asset-drawer-preview-image {
+  display: block;
+  object-fit: cover;
+}
+
+.asset-drawer-preview-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.6rem;
+  color: #64748b;
+  font-size: 0.72rem;
+  text-align: center;
+}
+
 .layout-shell.theme-dark .asset-drawer-item {
   background: rgba(15, 23, 42, 0.84);
   border-color: rgba(148, 163, 184, 0.18);
@@ -3124,6 +3224,7 @@ export default {
 
 .asset-drawer-meta {
   display: flex;
+  flex: 1;
   flex-direction: column;
   gap: 0.25rem;
   min-width: 0;
@@ -3161,6 +3262,12 @@ export default {
 .asset-drawer-type {
   font-size: 0.76rem;
   color: #64748b;
+}
+
+.asset-drawer-description {
+  font-size: 0.74rem;
+  color: #64748b;
+  line-height: 1.45;
 }
 
 .meta-item {
