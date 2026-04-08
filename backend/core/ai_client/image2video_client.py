@@ -314,7 +314,8 @@ class VideoGeneratorClient:
             'filePaths': [],
         }
         if resolved_image_base64:
-            payload['imageBase64'] = resolved_image_base64
+            # payload['imageBase64'] = resolved_image_base64
+            payload['image'] = resolved_image_base64
         if camera_movement_description:
             payload['cameraMovementDescription'] = camera_movement_description
         if resolution:
@@ -437,6 +438,9 @@ class VideoGeneratorClient:
         )
 
         videos = result.get('data', {}).get('videos', [])
+        if not videos:
+            video = result.get('data', {}).get("content", {}).get("video_url")
+            videos = [video]
         video_data = []
         for video in videos:
             url = video.get('url') if isinstance(video, dict) else video
