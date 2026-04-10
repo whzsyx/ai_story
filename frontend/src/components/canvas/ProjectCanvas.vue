@@ -1084,7 +1084,7 @@ export default {
       return [
         `关联分镜：${storyboard.scene_description || `分镜 ${storyboard.sequence_number}`}`,
         `运镜类型：${camera.movement_type || '暂无'}`,
-        `运镜描述：${movementParams.description || movementParams.raw_text || '暂无'}`,
+        `运镜描述：${movementParams.description || '暂无'}`,
       ].join('\n');
     },
     nodeChatQuickActions() {

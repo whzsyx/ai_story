@@ -467,18 +467,7 @@ class Image2VideoStageProcessor(StageProcessor):
         if not camera_movement:
             return ''
 
-        raw_text = camera_movement.movement_params.get('raw_text', '')
-        if raw_text:
-            return raw_text
-        if camera_movement.prompt_used:
-            return camera_movement.prompt_used
-
-        parts = []
-        if camera_movement.movement_type:
-            parts.append(f"运镜类型: {camera_movement.movement_type}")
-        if camera_movement.movement_params:
-            parts.append(f"运镜参数: {camera_movement.movement_params}")
-        return '\n'.join(parts)
+        return camera_movement.get_movement_description()
 
     def _get_prompt_template(self, project: Project):
         """获取提示词模板"""

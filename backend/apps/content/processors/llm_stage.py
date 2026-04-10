@@ -556,8 +556,8 @@ class LLMStageProcessor(StageProcessor):
 
             provider = self._get_current_provider(project)
 
-            # 解析运镜文本(假设返回的是JSON格式)
-            movement_params = {'raw_text': generated_text}
+            # 运镜文本统一落到 description，兼容画布编辑与图生视频提示拼装。
+            movement_params = {'description': generated_text.strip()}
 
             # 保存运镜数据
             CameraMovement.objects.update_or_create(

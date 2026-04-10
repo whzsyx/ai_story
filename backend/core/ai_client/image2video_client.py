@@ -315,7 +315,8 @@ class VideoGeneratorClient:
         }
         if resolved_image_base64:
             # payload['imageBase64'] = resolved_image_base64
-            payload['image'] = resolved_image_base64
+            image_url = f'data:{image_mime_type};base64,{resolved_image_base64}'
+            payload['image'] = image_url
         if camera_movement_description:
             payload['cameraMovementDescription'] = camera_movement_description
         if resolution:
