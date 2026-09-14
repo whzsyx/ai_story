@@ -9,7 +9,7 @@ import logging
 from typing import Any, Dict, Generator, List, Optional
 
 from django.conf import settings
-from core.ai_client.factory import create_ai_client
+from apps.models.token_utils import create_ai_client_for_user
 from core.pipeline.base import PipelineContext, StageProcessor, StageResult
 from django.utils import timezone
 from jinja2 import Template, TemplateError
@@ -423,7 +423,6 @@ class Image2VideoStageProcessor(StageProcessor):
                 return
 
             model_name = provider.model_name
-            api_key = provider.api_key
             api_url = provider.api_url
             image_url = image_urls[0].get("url", "") if image_urls else ""
             image_base64 = storyboard.get("url", "")
@@ -439,10 +438,9 @@ class Image2VideoStageProcessor(StageProcessor):
                 },
             )
 
-            client = create_ai_client(provider)
+            client = create_ai_client_for_user(provider, user=project.user)
             generate_kwargs = {
                 'api_url': api_url,
-                'session_id': api_key,
                 'model': model_name,
                 'prompt': prompt,
                 'camera_movement_description': camera_movement_description,

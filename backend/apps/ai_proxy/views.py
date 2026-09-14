@@ -16,7 +16,7 @@ from rest_framework.views import APIView
 from apps.models.models import ModelProvider
 from apps.models.serializers import ModelProviderListSerializer
 from core.ai_client.base import AIResponse
-from core.ai_client.factory import create_ai_client
+from apps.models.token_utils import create_ai_client_for_user
 from core.ai_client.image_service import ImageGenerationService
 from core.ai_client.schemas import ImageEditRequest, Text2ImageRequest
 from core.utils.file_storage import image_storage, video_storage
@@ -195,8 +195,9 @@ class ChatCompletionsProxyView(APIView):
                 status=status.HTTP_503_SERVICE_UNAVAILABLE,
             )
 
+        effective_api_key = provider.api_key
         headers = {
-            'Authorization': f'Bearer {provider.api_key}',
+            'Authorization': f'Bearer {effective_api_key}',
             'Content-Type': 'application/json',
         }
         payload = {
@@ -352,7 +353,7 @@ class ImagesGenerationsProxyView(APIView):
             )
 
         try:
-            client = create_ai_client(provider)
+            client = create_ai_client_for_user(provider, user=request.user)
             if provider_type == 'image_edit':
                 ai_response = ImageGenerationService.edit(
                     provider,
@@ -386,6 +387,12 @@ class ImagesGenerationsProxyView(APIView):
                     client=client,
                 )
             return self._normalize_image_result(ai_response, provider, provider_type)
+        except ValueError as exc:
+            logger.warning('图片代理参数错误: %s', exc)
+            return Response(
+                {'error': str(exc)},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         except Exception as exc:
             logger.error('图片代理异常: %s', exc, exc_info=True)
             return Response(
@@ -453,7 +460,7 @@ class VideosGenerationsProxyView(APIView):
             )
 
         try:
-            client = create_ai_client(provider)
+            client = create_ai_client_for_user(provider, user=request.user)
             raw_result = client._generate_video(
                 prompt=prompt,
                 model=provider.model_name,
@@ -491,6 +498,12 @@ class VideosGenerationsProxyView(APIView):
                 'data': result['data'],
                 'metadata': result['metadata'],
             })
+        except ValueError as exc:
+            logger.warning('视频代理参数错误: %s', exc)
+            return Response(
+                {'error': str(exc)},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         except Exception as exc:
             logger.error('视频代理异常: %s', exc, exc_info=True)
             return Response(

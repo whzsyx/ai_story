@@ -142,6 +142,7 @@
               <input
                 v-model.trim="vendorForm.api_key"
                 type="password"
+                autocomplete="new-password"
                 class="field-input"
                 placeholder="请输入该厂商 API Key"
                 @blur="handleVendorConnectionBlur"
@@ -812,7 +813,7 @@ export default {
         api_key: '',
         api_url: '',
         is_active: true,
-        timeout: 60,
+        timeout: 180,
         max_tokens: 40960,
         temperature: 0.7,
         top_p: 1,
@@ -836,7 +837,7 @@ export default {
         max_tokens: 4096,
         temperature: 0.7,
         top_p: 1.0,
-        timeout: 60,
+        timeout: 180,
         is_active: true,
         priority: 0,
         rate_limit_rpm: 60,
@@ -1122,10 +1123,7 @@ export default {
         this.modelFilterMode = this.discoveredModels.some((item) => item.classified_capability === preferredMode)
           ? preferredMode
           : 'all'
-        const defaultModels = this.modelFilterMode === 'all'
-          ? this.discoveredModels
-          : this.discoveredModels.filter((item) => item.classified_capability === this.modelFilterMode)
-        this.selectedModelNames = defaultModels.map((item) => item.id)
+        this.selectedModelNames = []
         if (!this.discoveredModels.length) {
           await this.$alert('当前厂商未返回可导入模型', '拉取完成', { tone: 'warning' })
         }
@@ -1143,7 +1141,6 @@ export default {
 
     setModelFilterMode(mode) {
       this.modelFilterMode = mode
-      this.selectedModelNames = this.visibleModels.map((item) => item.id)
     },
 
     selectAll() {

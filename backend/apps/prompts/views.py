@@ -30,6 +30,7 @@ from .models import (
     PromptTemplate,
     PromptTemplateSet,
     GlobalVariable,
+    PromptSnippet,
     PromptDebugSession,
     PromptDebugRun,
     PromptDebugArtifact,
@@ -45,6 +46,8 @@ from .serializers import (
     GlobalVariableSerializer,
     GlobalVariableListSerializer,
     GlobalVariableBatchSerializer,
+    PromptSnippetSerializer,
+    PromptSnippetListSerializer,
     PromptDebugSessionSerializer,
     PromptDebugRunSerializer,
     PromptDebugArtifactSerializer,
@@ -655,6 +658,15 @@ class GlobalVariableViewSet(viewsets.ModelViewSet):
         ratio = request.data.get('ratio') or extra_config.get('ratio') or '1:1'
         resolution = request.data.get('resolution') or extra_config.get('resolution') or '2k'
 
+        try:
+            from apps.models.token_utils import create_ai_client_for_user
+            client = create_ai_client_for_user(provider, user=request.user)
+        except ValueError as exc:
+            return Response(
+                {'error': str(exc)},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
         response = ImageGenerationService.generate(
             provider=provider,
             request=Text2ImageRequest(
@@ -666,6 +678,7 @@ class GlobalVariableViewSet(viewsets.ModelViewSet):
                     'resolution': resolution,
                 },
             ),
+            client=client,
         )
 
         images = response.data if hasattr(response, 'data') else None
@@ -747,6 +760,52 @@ class GlobalVariableViewSet(viewsets.ModelViewSet):
             'message': '图片资产保存成功',
             'asset': serializer.data,
         }, status=status.HTTP_200_OK if asset_id else status.HTTP_201_CREATED)
+
+
+class PromptSnippetViewSet(viewsets.ModelViewSet):
+    """快捷提示词视图集"""
+
+    queryset = PromptSnippet.objects.all()
+    permission_classes = [IsAuthenticated]
+    filter_backends = [DjangoFilterBackend]
+    filterset_fields = ['node_type', 'apply_mode', 'is_active', 'is_favorite', 'category']
+    search_fields = ['name', 'content', 'category']
+    ordering_fields = ['sort_order', 'updated_at', 'created_at', 'name']
+    ordering = ['-is_favorite', 'sort_order', '-updated_at']
+
+    def get_queryset(self):
+        return PromptSnippet.objects.filter(created_by=self.request.user)
+
+    def get_serializer_class(self):
+        if self.action == 'list':
+            return PromptSnippetListSerializer
+        return PromptSnippetSerializer
+
+    @action(detail=False, methods=['get'])
+    def categories(self, request):
+        queryset = self.get_queryset()
+        node_type = str(request.query_params.get('node_type') or '').strip()
+        if node_type:
+            queryset = queryset.filter(Q(node_type=node_type) | Q(node_type='all'))
+
+        categories = [
+            category for category in queryset.values_list('category', flat=True).distinct()
+            if category
+        ]
+        return Response({'categories': sorted(categories)})
+
+    @action(detail=False, methods=['post'])
+    def quick_save(self, request):
+        serializer = PromptSnippetSerializer(data=request.data, context={'request': request})
+        serializer.is_valid(raise_exception=True)
+        snippet = serializer.save()
+        return Response(
+            {
+                'message': '快捷提示词保存成功',
+                'snippet': PromptSnippetSerializer(snippet, context={'request': request}).data,
+            },
+            status=status.HTTP_201_CREATED
+        )
 
 
 class PromptDebugSessionViewSet(viewsets.ModelViewSet):

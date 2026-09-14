@@ -149,6 +149,24 @@ const routes = [
         component: () => import('@/views/prompts/PromptDebugWorkbench.vue'),
         meta: { title: '提示词调试工作台' },
       },
+      {
+        path: 'node-schemas',
+        name: 'NodeSchemaManager',
+        component: () => import('@/views/workflows/NodeSchemaManager.vue'),
+        meta: { title: '节点结构定义' },
+      },
+      {
+        path: 'node-schemas/create',
+        name: 'NodeSchemaCreate',
+        component: () => import('@/views/workflows/NodeSchemaForm.vue'),
+        meta: { title: '新建节点结构定义' },
+      },
+      {
+        path: 'node-schemas/:id/edit',
+        name: 'NodeSchemaEdit',
+        component: () => import('@/views/workflows/NodeSchemaForm.vue'),
+        meta: { title: '编辑节点结构定义' },
+      },
     ],
   },
   {
@@ -200,6 +218,12 @@ const routes = [
         meta: { title: '批量添加厂商模型' },
       },
       {
+        path: ':id/clone',
+        name: 'model-clone',
+        component: () => import('@/views/models/ModelForm.vue'),
+        meta: { title: '克隆模型' },
+      },
+      {
         path: ':id/edit',
         name: 'model-edit',
         component: () => import('@/views/models/ModelForm.vue'),
@@ -237,14 +261,21 @@ router.beforeEach((to, from, next) => {
   }
 
   const isAuthenticated = store.getters['auth/isAuthenticated'];
+  const isSuperuser = store.getters['auth/isSuperuser'];
   const requiresAuth = to.matched.some(record => record.meta.requiresAuth);
   const requiresGuest = to.matched.some(record => record.meta.requiresGuest);
+
+  // 管理页面仅 superuser 可访问
+  const adminPaths = ['/models', '/prompts', '/assets'];
+  const isAdminPage = adminPaths.some(p => to.path === p || to.path.startsWith(p + '/'));
 
   if (requiresAuth && !isAuthenticated) {
     next({
       path: '/login',
       query: { redirect: to.fullPath },
     });
+  } else if (requiresAuth && isAdminPage && !isSuperuser) {
+    next('/series');
   } else if (requiresGuest && isAuthenticated) {
     next('/series');
   } else {

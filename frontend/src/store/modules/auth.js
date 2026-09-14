@@ -76,6 +76,7 @@ const getters = {
   refreshToken: state => state.refreshToken,
   user: state => state.user,
   isAuthenticated: state => state.isAuthenticated,
+  isSuperuser: state => state.user?.is_superuser === true,
   username: state => state.user?.username || '',
   userEmail: state => state.user?.email || '',
 }

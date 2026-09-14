@@ -50,6 +50,7 @@ MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
+    'apps.workflows.middleware.WorkflowGZipMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
@@ -76,13 +77,36 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'config.wsgi.application'
 
-# 数据库配置
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': os.getenv('SQLITE_DB_PATH', str(BASE_DIR / 'data' / 'ai_story.db')),
+def build_database_config():
+    if (
+        os.getenv('MYSQL_DB_NAME')
+        and os.getenv('MYSQL_PASSWORD')
+        and os.getenv('MYSQL_HOST')
+    ):
+        print('程序启动数据库：MySQL')
+        return {
+            'default': {
+                'ENGINE': 'django.db.backends.mysql',
+                'NAME': os.getenv('MYSQL_DB_NAME'),
+                'USER': os.getenv('MYSQL_USER', 'root'),
+                'PASSWORD': os.getenv('MYSQL_PASSWORD', ''),
+                'HOST': os.getenv('MYSQL_HOST'),
+                'PORT': int(os.getenv('MYSQL_PORT', '3306')),
+                'OPTIONS': {
+                    'charset': 'utf8mb4',
+                },
+            }
+        }
+
+    return {
+        'default': {
+            'ENGINE': 'django.db.backends.sqlite3',
+            'NAME': os.getenv('SQLITE_DB_PATH', str(BASE_DIR / 'data' / 'ai_story.db')),
+        }
     }
-}
+
+# 数据库配置
+DATABASES = build_database_config()
 
 # 密码验证
 AUTH_PASSWORD_VALIDATORS = [
@@ -156,9 +180,11 @@ CORS_ALLOWED_ORIGINS = [
 ]
 
 AGENT_SERVER_BASE_URL = os.getenv('AGENT_SERVER_BASE_URL', 'http://127.0.0.1:9002').strip()
-AGENT_SERVER_USERNAME = os.getenv('AGENT_SERVER_USERNAME', 'opencode').strip()
-AGENT_SERVER_PASSWORD = os.getenv('AGENT_SERVER_PASSWORD', '').strip()
+AGENT_SERVER_USERNAME = os.getenv('AGENT_SERVER_USERNAME', '').strip()
+AGENT_SERVER_PASSWORD = os.getenv('AGENT_SERVER_PASSWORD', 'test').strip()
+AGENT_SERVER_WORKSPACE_PATH = os.getenv('AGENT_SERVER_WORKSPACE_PATH', '/home/opencode/app').strip()
 MCP_ACCESS_TOKEN = os.getenv('MCP_ACCESS_TOKEN', 'test').strip()
+LINKNOW_REGISTRATION_INVITE_CODE = os.getenv('LINKNOW_REGISTRATION_INVITE_CODE', 'charles').strip()
 AGENT_MODEL_PROVIDER_ID = os.getenv('AGENT_MODEL_PROVIDER_ID', 'opencode').strip()
 AGENT_MODEL_ID = os.getenv('AGENT_MODEL_ID', 'big-pickle').strip()
 AGENT_MODEL_VARIANT = os.getenv('AGENT_MODEL_VARIANT', '').strip()

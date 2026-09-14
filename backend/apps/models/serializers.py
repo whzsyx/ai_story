@@ -457,3 +457,4 @@ class VendorConnectionConfigQuerySerializer(serializers.Serializer):
         if attrs['capability'] not in capabilities:
             raise serializers.ValidationError({'capability': '当前厂商不支持该模型能力'})
         return attrs
+

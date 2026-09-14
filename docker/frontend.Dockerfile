@@ -1,25 +1,28 @@
-# Build stage
-FROM node:22-alpine AS build
+FROM node:22-alpine AS admin-build
 
-WORKDIR /app
+WORKDIR /build/frontend
 
-# Copy package files
 COPY frontend/package*.json ./
-
-# Install dependencies
 RUN npm ci
 
-# Copy source code
 COPY frontend/ ./
 
-# Build the application
+ARG ADMIN_BASE_PATH=/admin/
+ARG ADMIN_API_BASE_URL=/api/v1
+ARG ADMIN_SSE_BASE_URL=
+ENV APP_BASE_PATH=${ADMIN_BASE_PATH} \
+    VUE_APP_API_BASE_URL=${ADMIN_API_BASE_URL} \
+    VUE_APP_SSE_BASE_URL=${ADMIN_SSE_BASE_URL}
+
 RUN npm run build
 
-# Production stage
 FROM nginx:1.25-alpine
 
 COPY docker/nginx/frontend.conf /etc/nginx/conf.d/default.conf
-COPY --from=build /dist /usr/share/nginx/html
+# Linknow is maintained in a separate repository. Commit its locally built
+# static output at linknow/dist before triggering this workflow.
+COPY linknow/dist /usr/share/nginx/html
+COPY --from=admin-build /build/dist /usr/share/nginx/html/admin
 
 EXPOSE 3000
 
