@@ -16,7 +16,7 @@ services:
 
 
   backend:
-    image: ai_story-v2:latest
+    image: xhongc/ai_story-backend:latest
     command: gunicorn --chdir /app/backend config.wsgi:application --bind 0.0.0.0:8010 -k gevent --workers 2 --worker-connections 1000 --timeout 3600
     restart: unless-stopped
     volumes:
@@ -35,7 +35,7 @@ services:
       - mysql
 
   celery:
-    image: ai_story-v2:latest
+    image: xhongc/ai_story-backend:latest
     working_dir: /app/backend
     command: celery -A config worker -l info -P gevent
     restart: unless-stopped
@@ -55,7 +55,7 @@ services:
       - mysql
 
   frontend:
-    image: ai_story_frontend-v2:latest
+    image: xhongc/ai_story-frontend:latest
     restart: unless-stopped
     ports:
       - "3003:3000"
