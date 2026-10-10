@@ -22,7 +22,7 @@ from .services.gateway import AgentGateway
 from .services.session_manager import AgentSessionManager
 
 ASSISTANT_MODEL_PREFERENCE_KEY = 'assistant_model_provider_id'
-SERVICE_CUTOFF_DATE = date(2026, 10, 30)
+SERVICE_CUTOFF_DATE = date(2026, 12, 30)
 
 
 def _service_expired():
